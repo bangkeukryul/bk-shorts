@@ -28,7 +28,7 @@
     boxColor: '#000000', boxOp: 0.45, align: 'center', yPos: 50, anim: 'lines', lineSp: 1.4,
     particles: ['glints', 'hearts'], density: 1, frame: 'none', vignette: 0.25, ovOp: 0.8, fadeEdges: true,
     res: '1080', fps: '30', hq: false,
-    clipMax: '10', clipSound: 'clip', capTheme: 'life', cardMode: 'ends',
+    clipMax: '10', clipSound: 'clip', capTheme: 'life', cardMode: 'always', cardV: 2,
   };
   const STORE_KEY = 'gamseong-shorts.v1';
   function loadSettings() {
@@ -36,6 +36,7 @@
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       if (s.font === 'custom') s.font = DEF.font; // 업로드 글꼴은 저장되지 않음
       if (s.frame === 'custom') s.frame = 'none';
+      if (s.cardV !== 2) { s.cardMode = 'always'; s.cardV = 2; } // 명함 기본값을 '계속'으로 바꿈 (2026-10-25)
       return Object.assign({}, DEF, s);
     } catch (e) { return Object.assign({}, DEF); }
   }
@@ -49,7 +50,7 @@
     set: loadSettings(),
     photos: [], audio: null, perText: {}, srt: null, txtBlocks: null,
     stickers: [], frameImg: null, ov: null, busy: false,
-    card: { company: '', branch: '', role: '', name: '', phone: '', msg: '' }, cardFace: null, cardFaceUrl: '',
+    card: { company: '', companies: [''], branch: '', role: '', name: '', phone: '', msg: '' }, cardFace: null, cardFaceUrl: '',
   };
   const hasVid = () => S.photos.some(p => p.kind === 'video');
   let uid = 1;
@@ -450,7 +451,7 @@
 
   // ═════════ 내 명함 ═════════
   const CARD_KEY = 'bk-shorts.card';
-  const CARD_F = ['company', 'branch', 'role', 'name', 'phone', 'msg'];
+  const CARD_F = ['branch', 'role', 'name', 'phone', 'msg'];
   function fmtPhone(v) {
     const d = (v || '').replace(/\D/g, '');
     if (/^01\d{8,9}$/.test(d)) return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
@@ -463,11 +464,66 @@
   async function loadCard() {
     try {
       const d = JSON.parse(localStorage.getItem(CARD_KEY) || '{}');
-      if (d.info) CARD_F.forEach(k => { S.card[k] = d.info[k] || ''; });
+      if (d.info) {
+        CARD_F.forEach(k => { S.card[k] = d.info[k] || ''; });
+        S.card.companies = Array.isArray(d.info.companies) && d.info.companies.length ? d.info.companies.slice(0, 3) : [d.info.company || ''];
+      }
       if (d.face) { S.cardFaceUrl = d.face; S.cardFace = await loadImg(d.face); }
     } catch (e) { /* 무시 */ }
     CARD_F.forEach(k => { const el = $('#card_' + k); if (el) el.value = S.card[k]; });
+    renderComps();
     renderFace();
+  }
+  // ── 여러 회사 (BK톡톡과 같음: 최대 3개, 여러 개면 지점명은 안 넣음) ──
+  function syncComps() {
+    const names = S.card.companies.map(v => v.trim()).filter(Boolean);
+    S.card.company = names.join(' · ');
+    const multi = names.length > 1;
+    $('#card_branch').disabled = multi;
+    $('#compNote').hidden = !multi;
+    $('#compAdd').hidden = S.card.companies.length >= 3;
+  }
+  function renderComps() {
+    $('#compList').innerHTML = S.card.companies.map((v, i) => `<div class="compRow"><input type="text" data-ci="${i}" value="${v.replace(/"/g, '&quot;')}" placeholder="${i ? '예: 삼성화재' : '예: 삼성생명'}">${i ? `<button type="button" data-cx="${i}" aria-label="회사 빼기">✕</button>` : ''}</div>`).join('');
+    syncComps();
+  }
+  $('#compList').addEventListener('input', e => {
+    const i = e.target.dataset.ci; if (i == null) return;
+    S.card.companies[+i] = e.target.value; syncComps(); saveCard(); cardChanged(400);
+  });
+  $('#compList').addEventListener('click', e => {
+    const b = e.target.closest('button[data-cx]'); if (!b) return;
+    S.card.companies.splice(+b.dataset.cx, 1); renderComps(); saveCard(); cardChanged(0);
+  });
+  $('#compAdd').addEventListener('click', () => {
+    if (S.card.companies.length >= 3) return;
+    S.card.companies.push(''); renderComps();
+    const ins = $$('#compList input'); ins[ins.length - 1].focus();
+  });
+  function cardInfo() {
+    const multi = S.card.companies.map(v => v.trim()).filter(Boolean).length > 1;
+    return { company: S.card.company, branch: multi ? '' : S.card.branch, role: S.card.role, name: S.card.name, phone: fmtPhone(S.card.phone), msg: S.card.msg };
+  }
+  // ── 명함 미리보기 + 바뀌면 미리보기 화면을 명함이 보이는 곳으로 ──
+  let prevTimer = 0;
+  function cardChanged(delay) {
+    clearTimeout(prevTimer);
+    prevTimer = setTimeout(async () => {
+      const i = cardInfo(), has = !!(i.name || i.company || i.phone);
+      $('#cardPrevEmpty').hidden = has; $('#cardPrev').hidden = !has;
+      if (has) {
+        await E.ensureFont({ family: 'Noto Sans KR', weight: 800, gf: 'Noto+Sans+KR:wght@500;700;800' }, Object.values(i).join('') + '0123456789-');
+        const c = E.makeCard(i, 720, S.cardFace || null);
+        $('#cardPrev').src = c.toDataURL('image/png');
+        c.width = 0;
+      }
+      if (P.pj && !P.playing && S.set.cardMode !== 'none') {
+        const T = P.pj.total, m = S.set.cardMode;
+        if (m === 'ends' && P.t > 4 && P.t < T - 4) P.t = 1.5;
+        if (m === 'end' && P.t < T - 4) P.t = Math.max(0, T - 2);
+      }
+      scheduleRebuild(0);
+    }, delay);
   }
   function renderFace() {
     $('#faceThumb').src = S.cardFaceUrl || '';
@@ -477,12 +533,12 @@
   }
   CARD_F.forEach(k => {
     const el = $('#card_' + k);
-    el.addEventListener('input', () => { S.card[k] = el.value.trim(); saveCard(); scheduleRebuild(400); });
-    if (k === 'phone') el.addEventListener('change', () => { el.value = fmtPhone(el.value); S.card.phone = el.value; saveCard(); scheduleRebuild(0); });
+    el.addEventListener('input', () => { S.card[k] = el.value.trim(); saveCard(); cardChanged(400); });
+    if (k === 'phone') el.addEventListener('change', () => { el.value = fmtPhone(el.value); S.card.phone = el.value; saveCard(); cardChanged(0); });
   });
   $('#cardMsgChips').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
-    $('#card_msg').value = b.textContent; S.card.msg = b.textContent; saveCard(); scheduleRebuild(0);
+    $('#card_msg').value = b.textContent; S.card.msg = b.textContent; saveCard(); cardChanged(0);
   });
   $('#faceFile').addEventListener('change', async e => {
     const f = e.target.files[0]; e.target.value = '';
@@ -495,10 +551,10 @@
       release();
       S.cardFaceUrl = c.toDataURL('image/jpeg', 0.85);
       S.cardFace = await loadImg(S.cardFaceUrl);
-      saveCard(); renderFace(); scheduleRebuild(0);
+      saveCard(); renderFace(); cardChanged(0);
     } catch (err) { toast('사진을 열 수 없어요'); }
   });
-  $('#faceRemove').addEventListener('click', () => { S.cardFace = null; S.cardFaceUrl = ''; saveCard(); renderFace(); scheduleRebuild(0); });
+  $('#faceRemove').addEventListener('click', () => { S.cardFace = null; S.cardFaceUrl = ''; saveCard(); renderFace(); cardChanged(0); });
 
   function updateBlockCount() {
     const n = E.splitBlocks(S.set.bulkText || '').length;
@@ -617,7 +673,7 @@
       frame: st.frame === 'custom' && !S.frameImg ? 'none' : st.frame, frameImg: S.frameImg, vignette: st.vignette,
       overlayVideo: null, ovOpacity: st.ovOp, fadeEdges: st.fadeEdges,
       audio,
-      card: cardOn ? { mode: st.cardMode, info: Object.assign({}, S.card, { phone: fmtPhone(S.card.phone) }), face: S.cardFace } : null,
+      card: cardOn ? { mode: st.cardMode, info: cardInfo(), face: S.cardFace } : null,
     };
   }
   /** 동영상이 섞여 있을 때: 사진은 '1장당 시간', 동영상은 자기 길이(최대 길이까지) */
@@ -794,6 +850,7 @@
     if (k === 'textMode') renderPerList();
     if (k === 'res' || k === 'fps' || k === 'hq') return;
     if (k === 'clipMax') renderPhotos();
+    if (k === 'cardMode') { cardChanged(0); return; }
     if (k === 'ovOp' && P.r) { P.r.pj.ovOpacity = S.set.ovOp; if (!P.playing) drawStill(); return; }
     scheduleRebuild(k === 'bulkText' || k === 'topText' || k === 'bottomText' ? 400 : 160);
   }
@@ -939,7 +996,7 @@
   renderMusic();
   updateBlockCount();
   checkSupport();
-  loadCard().then(() => { if (P.pj) scheduleRebuild(0); });
+  loadCard().then(() => cardChanged(0));
   $$('.tabbar button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
   window.__app = { S, P, buildProject, addPhotos, addVideos, setMusic, setBuiltin, doExport, fillCaptions }; // 테스트용
 })();

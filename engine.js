@@ -1046,6 +1046,7 @@
       const always = this.pj.card.mode === 'always';
       const sc = always ? 0.8 : 1;
       const w = c.width * sc, h = c.height * sc;
+      // 명함 · 얼굴 사진은 항상 아래쪽 (글귀는 꾸미기 → 세로 위치로 올려서 맞춤)
       let cy = always ? 0.835 : 0.75;
       if (this.pj.bottomText.trim()) cy -= 0.07;
       const yy = H * cy - h / 2 + (1 - ease(a)) * 30 * this.s;
@@ -1409,6 +1410,6 @@
   g.ENG = {
     OPT, PARTICLES, BaseCache, Renderer, planScenes, subsFromScenes, parseSrt, splitBlocks,
     analyzeAudio, analyzeBuffer, decodeClipAudio, renderAudio, exportVideo, supportInfo, fontDef, setCustomFont, ensureFont, loadImage, mkCanvas,
-    seekVideo,
+    seekVideo, makeCard,
   };
 })(window);

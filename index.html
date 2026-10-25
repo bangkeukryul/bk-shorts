@@ -177,7 +177,11 @@
       <div class="group">
         <h3>🪪 내 명함 (원형 얼굴 + 명함)</h3>
         <div class="field col"><span class="lbl">명함 나오는 때</span>
-          <div class="seg wide" data-k="cardMode"><button type="button" data-v="ends">처음과 끝</button><button type="button" data-v="always">계속</button><button type="button" data-v="end">끝에만</button><button type="button" data-v="none">안 나옴</button></div>
+          <div class="seg wide" data-k="cardMode"><button type="button" data-v="always">계속</button><button type="button" data-v="ends">처음과 끝</button><button type="button" data-v="end">끝에만</button><button type="button" data-v="none">안 나옴</button></div>
+          <p class="hint" data-show="cardMode=always">영상 처음부터 끝까지 명함이 계속 나와요.</p>
+          <p class="hint" data-show="cardMode=ends">영상 <b>처음 4초</b>와 <b>마지막 4초</b>에만 나와요. (중간에는 안 보여요)</p>
+          <p class="hint" data-show="cardMode=end">영상 <b>마지막 4초</b>에만 나와요.</p>
+          <p class="hint">명함은 항상 <b>화면 아래쪽</b>에 나와요. 글귀가 가리면 아래 <b>글자 → 세로 위치</b>를 줄여서 글귀를 위로 올려 주세요.</p>
         </div>
         <div data-show="cardMode=none" class="hint">명함을 넣지 않아요.</div>
         <div class="cardbox" id="cardBox">
@@ -187,8 +191,11 @@
             <button type="button" class="ghost small" id="faceRemove" data-show="hasFace=true">빼기</button>
           </div>
           <div class="two">
-            <label>회사명<input type="text" id="card_company" placeholder="예: 삼성생명"></label>
-            <label>지점명<input type="text" id="card_branch" placeholder="예: ○○지점"></label>
+            <div class="lbl-col">회사명
+              <div id="compList"></div>
+              <button type="button" class="compAdd" id="compAdd">＋ 회사 추가</button>
+            </div>
+            <label>지점명<input type="text" id="card_branch" placeholder="예: ○○지점"><span class="compNote" id="compNote" hidden>회사가 여러 개라서 지점명은 명함에 넣지 않아요.</span></label>
             <label>직함<input type="text" id="card_role" placeholder="예: FC, 팀장"></label>
             <label>이름<input type="text" id="card_name" placeholder="예: 홍길동"></label>
             <label class="full">📞 전화번호 (선택)<input type="text" id="card_phone" inputmode="tel" placeholder="010-1234-5678"></label>
@@ -196,6 +203,7 @@
           </div>
           <div class="chips small-chips" id="cardMsgChips"><button type="button">언제든 편하게 연락 주세요</button><button type="button">보장분석 무료 상담</button><button type="button">고객님의 든든한 평생 파트너</button></div>
           <p class="hint">비워 둔 칸은 명함에 넣지 않아요. 한 번 쓰면 이 휴대폰에 기억돼요. 글자는 그대로 정확하게 들어가요.</p>
+          <div class="card-prev"><p class="lbl">👀 영상에 들어갈 명함</p><img id="cardPrev" alt="명함 미리보기" hidden><p class="hint" id="cardPrevEmpty">회사명·이름·전화번호 중 하나 이상 쓰면 여기에 보여요.</p></div>
         </div>
       </div>
       <div class="group">

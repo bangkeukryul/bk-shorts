@@ -252,6 +252,18 @@ button:disabled { opacity: 0.45; cursor: default; }
 .cardbox .two label { display: grid; gap: 4px; font-size: 0.84rem; color: var(--muted); min-width: 0; }
 .cardbox .two .full { grid-column: 1 / -1; }
 .small-chips button { font-size: 0.8rem; padding: 5px 10px; }
+.lbl-col { display: grid; gap: 4px; font-size: 0.84rem; color: var(--muted); min-width: 0; align-content: start; }
+#compList { display: grid; gap: 6px; }
+.compRow { display: flex; gap: 6px; align-items: center; }
+.compRow input { flex: 1; min-width: 0; }
+.compRow button { flex: none; width: 34px; height: 34px; border-radius: 10px; border: 1px solid #fecaca; background: #fff5f5; color: #dc2626; font-weight: 800; cursor: pointer; }
+.compAdd { justify-self: start; padding: 6px 12px; border-radius: 999px; border: 1px dashed #b9a3ee; background: #faf8ff; color: #5b34c4; font-weight: 800; font-size: 0.82rem; cursor: pointer; }
+.compNote { font-size: 0.78rem; color: #b45309; line-height: 1.4; }
+#card_branch:disabled { opacity: 0.45; }
+.card-prev { background: #2b2440; border-radius: 12px; padding: 10px 12px 12px; }
+.card-prev .lbl { margin: 0 0 8px; color: #fff; font-size: 0.84rem; font-weight: 700; }
+.card-prev .hint { color: #cfc6e6; }
+.card-prev img { display: block; width: 100%; height: auto; }
 
 /* ── 주소 · QR코드 보내기 ── */
 .share { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
