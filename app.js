@@ -28,6 +28,7 @@
     boxColor: '#000000', boxOp: 0.45, align: 'center', yPos: 50, anim: 'lines', lineSp: 1.4,
     particles: ['glints', 'hearts'], density: 1, frame: 'none', vignette: 0.25, ovOp: 0.8, fadeEdges: true,
     res: '1080', fps: '30', hq: false,
+    clipMax: '10', clipSound: 'clip', capTheme: 'life', cardMode: 'ends',
   };
   const STORE_KEY = 'gamseong-shorts.v1';
   function loadSettings() {
@@ -48,7 +49,9 @@
     set: loadSettings(),
     photos: [], audio: null, perText: {}, srt: null, txtBlocks: null,
     stickers: [], frameImg: null, ov: null, busy: false,
+    card: { company: '', branch: '', role: '', name: '', phone: '', msg: '' }, cardFace: null, cardFaceUrl: '',
   };
+  const hasVid = () => S.photos.some(p => p.kind === 'video');
   let uid = 1;
 
   // ═════════ 공통 UI ═════════
@@ -94,7 +97,7 @@
     updateShows();
   }
   function updateShows() {
-    const flags = Object.assign({}, S.set, { hasOv: !!S.ov });
+    const flags = Object.assign({}, S.set, { hasOv: !!S.ov, hasVid: hasVid(), hasFace: !!S.cardFace });
     $$('[data-show]').forEach(el => {
       const cond = el.dataset.show;
       let ok;
@@ -164,7 +167,10 @@
     } finally { release(); }
   }
   async function addPhotos(files) {
-    const list = Array.from(files || []);
+    const all = Array.from(files || []);
+    const vids = all.filter(f => /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm|3gp)$/i.test(f.name));
+    const list = all.filter(f => !vids.includes(f));
+    if (vids.length) await addVideos(vids);
     if (!list.length) return;
     busy(true, `사진 불러오는 중… 0/${list.length}`);
     let bad = 0;
@@ -172,7 +178,7 @@
       const f = list[i];
       try {
         const thumb = await makeThumb(f);
-        S.photos.push({ id: uid++, file: f, name: f.name, thumb });
+        S.photos.push({ id: uid++, kind: 'photo', file: f, name: f.name, thumb });
       } catch (e) { bad++; }
       busy(true, `사진 불러오는 중… ${i + 1}/${list.length}`);
     }
@@ -180,6 +186,75 @@
     if (bad) toast(`${bad}장은 열 수 없는 형식이라 건너뛰었어요 (JPG·PNG 권장)`);
     renderPhotos();
     scheduleRebuild(0);
+  }
+  // ═════════ 동영상 ═════════
+  let vidBox = null;
+  function mkClipVideo(url) {
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('muted', '');
+    v.preload = 'auto'; v.src = url;
+    if (!vidBox) {
+      vidBox = document.createElement('div');
+      vidBox.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;overflow:hidden;opacity:0;pointer-events:none';
+      document.body.appendChild(vidBox);
+    }
+    vidBox.appendChild(v);
+    return v;
+  }
+  function waitVideo(v) {
+    return new Promise((res, rej) => {
+      if (v.readyState >= 2) return res();
+      const ok = () => { clean(); res(); }, bad = () => { clean(); rej(new Error('영상을 열 수 없어요')); };
+      const clean = () => { v.removeEventListener('loadeddata', ok); v.removeEventListener('error', bad); };
+      v.addEventListener('loadeddata', ok); v.addEventListener('error', bad);
+      setTimeout(() => { clean(); v.readyState >= 1 ? res() : rej(new Error('영상을 열 수 없어요')); }, 15000);
+    });
+  }
+  async function addVideos(files) {
+    const list = Array.from(files || []);
+    if (!list.length) return;
+    let bad = 0, mute = 0;
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      busy(true, `동영상 불러오는 중… ${i + 1}/${list.length}`);
+      const url = URL.createObjectURL(f);
+      const el = mkClipVideo(url), xel = mkClipVideo(url);
+      try {
+        await waitVideo(el);
+        const dur = isFinite(el.duration) ? el.duration : 0;
+        if (!(dur > 0.3)) throw new Error('짧음');
+        el.play().then(() => el.pause()).catch(() => {});
+        xel.play().then(() => xel.pause()).catch(() => {});
+        await E.seekVideo(el, Math.min(0.4, dur / 2));
+        const c = E.mkCanvas(180, 320), x = c.getContext('2d');
+        const iw = el.videoWidth || 9, ih = el.videoHeight || 16, s = Math.max(180 / iw, 320 / ih);
+        x.fillStyle = '#000'; x.fillRect(0, 0, 180, 320);
+        try { x.drawImage(el, (180 - iw * s) / 2, (320 - ih * s) / 2, iw * s, ih * s); } catch (e) { /* 미리보기 그림 없음 */ }
+        const thumb = c.toDataURL('image/jpeg', 0.75);
+        busy(true, `영상 소리 읽는 중… ${i + 1}/${list.length}`);
+        const abuf = await E.decodeClipAudio(f);
+        if (!abuf) mute++;
+        S.photos.push({ id: uid++, kind: 'video', file: f, name: f.name, thumb, url, el, xel, dur, abuf });
+      } catch (e) {
+        bad++; el.remove(); xel.remove(); URL.revokeObjectURL(url);
+      }
+    }
+    busy(false);
+    if (bad) toast(`${bad}개는 열 수 없는 영상이라 건너뛰었어요 (MP4 권장)`);
+    else if (mute) toast('소리가 없는 영상은 배경음악이 나와요');
+    renderPhotos();
+    updateShows();
+    scheduleRebuild(0);
+  }
+  function freeItem(p) {
+    if (p.kind !== 'video') return;
+    p.el.pause(); p.xel.pause(); p.el.remove(); p.xel.remove();
+    p.el.src = ''; p.xel.src = '';
+    URL.revokeObjectURL(p.url);
+  }
+  function clipLenOf(p) {
+    const mx = +S.set.clipMax;
+    return Math.max(1, mx > 0 ? Math.min(p.dur, mx) : p.dur);
   }
   const ICON = {
     left: '<svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>',
@@ -189,7 +264,7 @@
   function renderPhotos() {
     const g = $('#photoGrid');
     g.innerHTML = S.photos.map((p, i) => `
-      <li data-id="${p.id}"><img src="${p.thumb}" alt="${i + 1}번 사진"><span class="num tnum">${i + 1}</span>
+      <li data-id="${p.id}"><img src="${p.thumb}" alt="${i + 1}번 ${p.kind === 'video' ? '동영상' : '사진'}"><span class="num tnum">${i + 1}</span>${p.kind === 'video' ? `<span class="vbadge tnum">▶ ${fmtTime(clipLenOf(p))}${p.abuf ? '' : ' 🔇'}</span>` : ''}
         <div class="acts">
           <button type="button" data-act="left" aria-label="앞으로">${ICON.left.replace('<path', '<path stroke="currentColor" stroke-width="2.4" fill="none"')}</button>
           <button type="button" data-act="del" aria-label="삭제">${ICON.del}</button>
@@ -201,13 +276,14 @@
   $('#photoGrid').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const id = +b.closest('li').dataset.id, i = S.photos.findIndex(p => p.id === id);
-    if (b.dataset.act === 'del') { S.photos.splice(i, 1); delete S.perText[id]; }
+    if (b.dataset.act === 'del') { freeItem(S.photos[i]); S.photos.splice(i, 1); delete S.perText[id]; updateShows(); }
     else if (b.dataset.act === 'left' && i > 0) [S.photos[i - 1], S.photos[i]] = [S.photos[i], S.photos[i - 1]];
     else if (b.dataset.act === 'right' && i < S.photos.length - 1) [S.photos[i + 1], S.photos[i]] = [S.photos[i], S.photos[i + 1]];
     renderPhotos();
     scheduleRebuild(0);
   });
   $('#photoInput').addEventListener('change', e => { addPhotos(e.target.files); e.target.value = ''; });
+  $('#videoInput').addEventListener('change', e => { addVideos(e.target.files); e.target.value = ''; });
 
   // ═════════ 음악 ═════════
   async function setMusic(file) {
@@ -225,10 +301,43 @@
       toast(e.message || '음악을 열 수 없어요');
     } finally { busy(false); }
   }
+  async function setBuiltin(kind) {
+    pause();
+    busy(true, '음악 만드는 중… (처음 한 번 몇 초 걸려요)');
+    try {
+      const buf = await window.BKMUSIC.render(kind, 90);
+      const info = E.analyzeBuffer(buf);
+      S.audio = Object.assign({ builtin: kind, name: window.BKMUSIC.label(kind) }, info);
+      P.audioKey = null;
+      if (S.set.bgmStart > info.duration - 1) setVal('bgmStart', 0);
+      $('#bgmStart').max = Math.max(1, Math.floor(info.duration - 1));
+      renderMusic();
+      scheduleRebuild(0);
+      toast('음악을 넣었어요 · ▶ 버튼으로 들어 보세요');
+    } catch (e) { toast('음악을 만들지 못했어요'); console.error(e); }
+    finally { busy(false); }
+  }
+  function renderBuiltinList() {
+    const box = $('#builtinList');
+    if (!box || !window.BKMUSIC) return;
+    box.innerHTML = window.BKMUSIC.LIST.map(([g, items]) => `<p class="mlbl">${g}</p><div class="chips mchips">${items.map(([k, l]) => `<button type="button" data-m="${k}">${l}</button>`).join('')}</div>`).join('');
+  }
+  function markBuiltin() {
+    $$('#builtinList button').forEach(b => b.setAttribute('aria-pressed', String(!!S.audio && S.audio.builtin === b.dataset.m)));
+  }
+  $('#builtinList').addEventListener('click', e => { const b = e.target.closest('button[data-m]'); if (b) setBuiltin(b.dataset.m); });
+  const PIXA = [['잔잔한 피아노', 'calm piano'], ['감성', 'emotional'], ['신나는', 'upbeat'], ['여행', 'travel'], ['로파이', 'lofi'],
+    ['웨딩', 'wedding'], ['어린이', 'kids'], ['어쿠스틱', 'acoustic'], ['찬양·교회', 'worship'], ['크리스마스', 'christmas']];
+  $('#pixaChips').innerHTML = PIXA.map(([k, en]) => `<a class="pchip" target="_blank" rel="noopener" href="https://pixabay.com/ko/music/search/${encodeURIComponent(en)}/">🔎 ${k}</a>`).join('');
+  $('#pixaGo').addEventListener('click', () => {
+    const q = $('#pixaQ').value.trim();
+    window.open(q ? `https://pixabay.com/ko/music/search/${encodeURIComponent(q)}/` : 'https://pixabay.com/ko/music/', '_blank', 'noopener');
+  });
   function renderMusic() {
     const a = S.audio;
+    markBuiltin();
     $('#musicCard').hidden = !a;
-    $('#musicDropText').textContent = a ? '다른 음악으로 바꾸기' : '음악 선택';
+    $('#musicDropText').textContent = a ? '내 음악 파일로 바꾸기' : '내 음악 파일 선택';
     if (!a) return;
     $('#musicName').textContent = a.name;
     $('#musicDur').textContent = fmtTime(a.duration);
@@ -262,6 +371,135 @@
     else { S.txtBlocks = E.splitBlocks(txt); S.srt = null; $('#textFileName').textContent = `${f.name} · 장면 ${S.txtBlocks.length}개`; }
     scheduleRebuild(0);
   });
+  // ═════════ 글귀 자동 채우기 (주제별 글귀 · ChatGPT) ═════════
+  const CAPS = window.BKCAPS || {};
+  function renderCapThemes() {
+    $('#capThemes').innerHTML = Object.entries(CAPS).map(([k, v]) => `<button type="button" data-v="${k}">${v.label}</button>`).join('');
+  }
+  function markCapTheme() { $$('#capThemes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.set.capTheme))); }
+  $('#capThemes').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    S.set.capTheme = b.dataset.v; saveSettings(); markCapTheme(); fillCaptions();
+  });
+  let lastPick = [];
+  function fillCaptions() {
+    const th = CAPS[S.set.capTheme] || Object.values(CAPS)[0];
+    if (!th) return;
+    const n = Math.max(1, S.photos.length || 5);
+    let pool = th.items.filter(t => !lastPick.includes(t));
+    if (pool.length < Math.min(n, th.items.length)) pool = th.items.slice();
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(pool[i % pool.length]);
+    lastPick = out.slice();
+    S.set.bulkText = out.join('\n\n');
+    if (S.set.textMode !== 'bulk') S.set.textMode = 'bulk';
+    saveSettings(); syncControls(); updateBlockCount(); scheduleRebuild(0);
+    toast(`${th.label} 글귀 ${n}개를 넣었어요 · 마음대로 고쳐 써도 돼요`);
+  }
+  $('#capFill').addEventListener('click', fillCaptions);
+  function gptPrompt() {
+    const th = CAPS[S.set.capTheme];
+    const n = Math.max(1, S.photos.length);
+    return `첨부한 사진 ${n}장을 순서대로 보고, 사진마다 어울리는 짧은 감성 글귀를 한국어로 ${n}개 써 주세요.\n`
+      + `주제: ${th ? th.label.replace(/^\S+\s/, '') : '자유'}\n`
+      + `규칙:\n- 글귀 1개는 2~3줄, 한 줄은 15자 안쪽\n- 글귀와 글귀 사이에는 빈 줄 하나\n`
+      + `- 번호, 따옴표, 제목, 설명 없이 글귀만\n- 명언이나 성경 구절을 쓸 때는 마지막 줄에 '— 출처'를 정확히 쓰고, 확실하지 않으면 직접 지은 글귀로 써 주세요`;
+  }
+  async function copyText(t) {
+    try { await navigator.clipboard.writeText(t); return true; } catch (e) {
+      const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select(); let ok = false; try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+      ta.remove(); return ok;
+    }
+  }
+  async function dataUrlFile(url, name) { const b = await (await fetch(url)).blob(); return new File([b], name, { type: b.type || 'image/jpeg' }); }
+  $('#capGpt').addEventListener('click', async () => {
+    if (!S.photos.length) { toast('먼저 사진을 추가해 주세요'); showTab('photo'); return; }
+    const prompt = gptPrompt();
+    await copyText(prompt);
+    const files = [];
+    for (const p of S.photos.slice(0, 10)) {
+      if (p.kind === 'video') files.push(await dataUrlFile(p.thumb, `video${p.id}.jpg`));
+      else files.push(p.file);
+    }
+    let shared = false;
+    try {
+      if (navigator.canShare && navigator.canShare({ files, text: prompt })) {
+        await navigator.share({ files, text: prompt });
+        shared = true;
+      }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    if (shared) toast('공유 목록에서 ChatGPT 를 고르세요 · 글이 안 들어가면 입력칸을 길게 눌러 붙여넣기', 6000);
+    else { toast('질문을 복사했어요 · ChatGPT 에 사진을 올리고 붙여넣기 하세요', 6000); window.open('https://chatgpt.com/', '_blank', 'noopener'); }
+    if (S.photos.length > 10) setTimeout(() => toast('ChatGPT 에는 사진을 10장까지만 보냈어요'), 6200);
+  });
+  function cleanGpt(t) {
+    return t.replace(/\r/g, '').split('\n').map(l => l.replace(/^\s*(\d+[.)]|[-*•]|#+)\s*/, '').replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').replace(/\*\*/g, '').trimEnd())
+      .join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  $('#capPaste').addEventListener('click', async () => {
+    let t = '';
+    try { t = await navigator.clipboard.readText(); } catch (e) { t = ''; }
+    if (!t.trim()) { toast('붙여넣을 글이 없어요 · 아래 글 칸을 길게 눌러 ‘붙여넣기’ 해 주세요', 5000); $('#bulkText').focus(); return; }
+    S.set.bulkText = cleanGpt(t);
+    if (S.set.textMode !== 'bulk') S.set.textMode = 'bulk';
+    saveSettings(); syncControls(); updateBlockCount(); scheduleRebuild(0);
+    toast('ChatGPT 글귀를 넣었어요');
+  });
+
+  // ═════════ 내 명함 ═════════
+  const CARD_KEY = 'bk-shorts.card';
+  const CARD_F = ['company', 'branch', 'role', 'name', 'phone', 'msg'];
+  function fmtPhone(v) {
+    const d = (v || '').replace(/\D/g, '');
+    if (/^01\d{8,9}$/.test(d)) return d.length === 11 ? `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+    return (v || '').trim();
+  }
+  function saveCard() {
+    try { localStorage.setItem(CARD_KEY, JSON.stringify({ info: S.card, face: S.cardFaceUrl || '' })); } catch (e) { /* 저장 공간 부족 */ }
+  }
+  function loadImg(url) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; }); }
+  async function loadCard() {
+    try {
+      const d = JSON.parse(localStorage.getItem(CARD_KEY) || '{}');
+      if (d.info) CARD_F.forEach(k => { S.card[k] = d.info[k] || ''; });
+      if (d.face) { S.cardFaceUrl = d.face; S.cardFace = await loadImg(d.face); }
+    } catch (e) { /* 무시 */ }
+    CARD_F.forEach(k => { const el = $('#card_' + k); if (el) el.value = S.card[k]; });
+    renderFace();
+  }
+  function renderFace() {
+    $('#faceThumb').src = S.cardFaceUrl || '';
+    $('#faceThumb').hidden = !S.cardFaceUrl;
+    $('#faceText').textContent = S.cardFaceUrl ? '얼굴 사진 바꾸기' : '얼굴 사진 선택 (선택)';
+    updateShows();
+  }
+  CARD_F.forEach(k => {
+    const el = $('#card_' + k);
+    el.addEventListener('input', () => { S.card[k] = el.value.trim(); saveCard(); scheduleRebuild(400); });
+    if (k === 'phone') el.addEventListener('change', () => { el.value = fmtPhone(el.value); S.card.phone = el.value; saveCard(); scheduleRebuild(0); });
+  });
+  $('#cardMsgChips').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    $('#card_msg').value = b.textContent; S.card.msg = b.textContent; saveCard(); scheduleRebuild(0);
+  });
+  $('#faceFile').addEventListener('change', async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    if (!f) return;
+    try {
+      const { img, release } = await E.loadImage(f);
+      const S2 = 420, c = E.mkCanvas(S2, S2), x = c.getContext('2d');
+      const iw = img.naturalWidth, ih = img.naturalHeight, sc = Math.max(S2 / iw, S2 / ih);
+      x.drawImage(img, (S2 - iw * sc) / 2, (S2 - ih * sc) * 0.3, iw * sc, ih * sc);
+      release();
+      S.cardFaceUrl = c.toDataURL('image/jpeg', 0.85);
+      S.cardFace = await loadImg(S.cardFaceUrl);
+      saveCard(); renderFace(); scheduleRebuild(0);
+    } catch (err) { toast('사진을 열 수 없어요'); }
+  });
+  $('#faceRemove').addEventListener('click', () => { S.cardFace = null; S.cardFaceUrl = ''; saveCard(); renderFace(); scheduleRebuild(0); });
+
   function updateBlockCount() {
     const n = E.splitBlocks(S.set.bulkText || '').length;
     $('#blockCount').textContent = `글 덩어리 ${n}개`;
@@ -344,7 +582,7 @@
     let beats = null;
     if (st.beatSync && S.audio && S.audio.beats.length) beats = S.audio.beats.map(b => b - st.bgmStart).filter(b => b > 0.3);
     const minTotal = srt ? Math.max(...srt.map(s => s.end)) + 1 : 0;
-    const { scenes, total } = E.planScenes({
+    const { scenes, total } = hasVid() ? planMixed(blocks.length, minTotal) : E.planScenes({
       nImages: S.photos.length, perDur: st.perDur, musicMode, musicDur: mdur,
       minScenes: blocks.length, minTotal, maxTotal: st.maxLen, beats,
     });
@@ -352,6 +590,20 @@
     else if (mode === 'per') scenes.forEach(s => { s.text = S.perText[S.photos[s.img].id] || ''; });
     const trans = Math.min(st.transDur, 0.45 * Math.min(...scenes.map(s => s.end - s.start)));
     const subs = srt || E.subsFromScenes(scenes, trans, total);
+    // 소리: 배경음악 + 영상 속 소리 (영상 소리가 나올 땐 배경음악은 쉼)
+    const clips = [], duck = [];
+    if (st.clipSound === 'clip') scenes.forEach(sc => {
+      const it = S.photos[sc.img];
+      if (it.kind === 'video' && it.abuf) {
+        clips.push({ buffer: it.abuf, at: sc.start, offset: sc.clipStart || 0, dur: sc.end - sc.start });
+        duck.push([sc.start, sc.end]);
+      }
+    });
+    const audio = (S.audio || clips.length) ? {
+      buffer: S.audio ? S.audio.buffer : null, start: st.bgmStart, volume: st.volume, fadeIn: 0.5, fadeOut: st.fadeOut,
+      clips, duck, clipVolume: 1,
+    } : null;
+    const cardOn = st.cardMode !== 'none' && (S.card.name || S.card.company || S.card.phone);
     return {
       photos: S.photos.slice(), scenes, total, subs,
       style: {
@@ -364,8 +616,28 @@
       particles: st.particles.filter(k => k !== 'custom' || S.stickers.length), density: st.density, stickers: S.stickers,
       frame: st.frame === 'custom' && !S.frameImg ? 'none' : st.frame, frameImg: S.frameImg, vignette: st.vignette,
       overlayVideo: null, ovOpacity: st.ovOp, fadeEdges: st.fadeEdges,
-      audio: S.audio ? { buffer: S.audio.buffer, start: st.bgmStart, volume: st.volume, fadeIn: 0.5, fadeOut: st.fadeOut } : null,
+      audio,
+      card: cardOn ? { mode: st.cardMode, info: Object.assign({}, S.card, { phone: fmtPhone(S.card.phone) }), face: S.cardFace } : null,
     };
+  }
+  /** 동영상이 섞여 있을 때: 사진은 '1장당 시간', 동영상은 자기 길이(최대 길이까지) */
+  function planMixed(nBlocks, minTotal) {
+    const st = S.set, items = S.photos, n = Math.max(items.length, nBlocks, 1);
+    const scenes = [];
+    let t = 0;
+    for (let k = 0; k < n; k++) {
+      const it = items[k % items.length];
+      const d = it.kind === 'video' ? clipLenOf(it) : st.perDur;
+      scenes.push({ img: k % items.length, start: t, end: t + d, text: '', clipStart: 0 });
+      t += d;
+    }
+    let total = Math.max(t, minTotal);
+    if (st.maxLen > 0 && total > st.maxLen) {
+      total = st.maxLen;
+      while (scenes.length > 1 && scenes[scenes.length - 1].start > total - 1) scenes.pop();
+    }
+    scenes[scenes.length - 1].end = total;
+    return { scenes, total };
   }
 
   // ═════════ 실시간 미리보기 ═════════
@@ -412,9 +684,12 @@
   }
   async function drawStill() {
     const r = P.r; if (!r) return;
-    try { await r.ensureFor(P.t); } catch (e) { toast('사진을 불러오지 못했어요'); return; }
+    // 맨 처음(0초)은 '시작 페이드' 때문에 까맣게 보이므로, 멈춘 화면은 1.2초 장면을 보여 줌
+    const tt = P.t < 0.05 ? Math.min(1.2, r.pj.total / 2) : P.t;
+    r.syncPlay(tt, false);
+    try { await r.ensureFor(tt); } catch (e) { toast('사진을 불러오지 못했어요'); return; }
     if (r !== P.r || P.playing) return;
-    r.draw(P.ctx, P.t);
+    r.draw(P.ctx, tt);
     updateTime();
   }
   function updateTime() {
@@ -431,9 +706,10 @@
     updateBlockCount();
   }
   function audioKey(pj) {
-    if (!pj.audio || !S.audio) return 'none';
+    if (!pj.audio) return 'none';
     const a = pj.audio;
-    return [S.audio.name, S.audio.duration, a.start, a.volume, a.fadeOut, pj.total.toFixed(2)].join('|');
+    const cl = a.clips.map(c => `${c.at.toFixed(2)}:${c.dur.toFixed(2)}:${S.photos.find(p => p.abuf === c.buffer)?.id}`).join(',');
+    return [S.audio ? S.audio.name + S.audio.duration : '-', a.start, a.volume, a.fadeOut, pj.total.toFixed(2), cl].join('|');
   }
   async function ensureAllBases(r) {
     const n = r.pj.scenes.length;
@@ -486,7 +762,7 @@
       const t = currentTime();
       if (!P.pj || t >= P.pj.total) { pause(); P.t = 0; drawStill(); return; }
       P.t = t;
-      if (P.r) P.r.draw(P.ctx, t);
+      if (P.r) { P.r.syncPlay(t, true); P.r.draw(P.ctx, t); }
       updateTime();
       P.raf = requestAnimationFrame(loop);
     };
@@ -497,6 +773,7 @@
     P.playing = false;
     cancelAnimationFrame(P.raf);
     stopAudio();
+    if (P.r) P.r.syncPlay(0, false);
     setPlayIcon(false);
   }
   function setPlayIcon(on) {
@@ -516,6 +793,7 @@
     if (k === 'bulkText') updateBlockCount();
     if (k === 'textMode') renderPerList();
     if (k === 'res' || k === 'fps' || k === 'hq') return;
+    if (k === 'clipMax') renderPhotos();
     if (k === 'ovOp' && P.r) { P.r.pj.ovOpacity = S.set.ovOp; if (!P.playing) drawStill(); return; }
     scheduleRebuild(k === 'bulkText' || k === 'topText' || k === 'bottomText' ? 400 : 160);
   }
@@ -528,6 +806,7 @@
     pause();
     const W = S.set.res === '720' ? 720 : 1080, H = S.set.res === '720' ? 1280 : 1920, fps = +S.set.fps;
     if (S.ov) pj.overlayVideo = S.ov.exportEl;
+    pj.exporting = true;
     X.ctl = { aborted: false };
     S.busy = true;
     $('#exportBtn').disabled = true;
@@ -600,7 +879,7 @@
     try {
       const imgs = await window.SAMPLES.sampleImages();
       await addPhotos(imgs);
-      if (!S.audio) { const m = await window.SAMPLES.sampleMusic(); await setMusic(m); }
+      if (!S.audio) { if (window.BKMUSIC) await setBuiltin('piano'); else { const m = await window.SAMPLES.sampleMusic(); await setMusic(m); } }
       if (!S.set.bulkText.trim()) { S.set.bulkText = SAMPLE_TEXT; syncControls(); }
       toast('샘플 준비 완료 · ▶ 버튼으로 재생해 보세요');
     } catch (e) { toast('샘플을 만들지 못했어요'); console.error(e); }
@@ -627,7 +906,17 @@
     try { localStorage.setItem('gamseong-shorts.ioshint', '1'); } catch (e) { /* 무시 */ }
   });
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+    // 새 버전이 올라오면 자동으로 바뀜 (BK톡톡과 같은 방식) — 영상을 만드는 중에는 새로고침하지 않음
+    const had = !!navigator.serviceWorker.controller;
+    let pendingReload = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!had || window.__rl) return;
+      if (S.busy) { pendingReload = true; return; }
+      if (S.photos.length) { toast('새 버전이 나왔어요 · 다음에 앱을 열 때 바뀌어요', 4000); return; }
+      window.__rl = 1; location.reload();
+    });
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {}));
+    setInterval(() => { if (pendingReload && !S.busy && !S.photos.length) location.reload(); }, 5000);
   }
 
   // ═════════ 시작 ═════════
@@ -643,10 +932,14 @@
   fillSelects();
   bindControls();
   syncControls();
+  renderBuiltinList();
+  renderCapThemes();
+  markCapTheme();
   renderPhotos();
   renderMusic();
   updateBlockCount();
   checkSupport();
+  loadCard().then(() => { if (P.pj) scheduleRebuild(0); });
   $$('.tabbar button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
-  window.__app = { S, P, buildProject, addPhotos, setMusic, doExport }; // 테스트용
+  window.__app = { S, P, buildProject, addPhotos, addVideos, setMusic, setBuiltin, doExport, fillCaptions }; // 테스트용
 })();

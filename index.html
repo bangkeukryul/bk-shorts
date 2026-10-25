@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>BK쇼츠</title>
 <meta name="description" content="사진·글귀·배경음악으로 틱톡·유튜브 쇼츠용 9:16 감성 영상을 휴대폰에서 바로 만드는 앱">
-<meta name="theme-color" content="#121026">
+<meta name="theme-color" content="#8b5cf6">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="BK쇼츠">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -35,7 +35,7 @@
     <div class="screen">
       <canvas id="preview" width="540" height="960"></canvas>
       <div class="screen-empty" id="screenEmpty">
-        <p>사진을 추가하면<br>여기서 바로 미리 볼 수 있어요</p>
+        <p>사진·동영상을 추가하면<br>여기서 바로 미리 볼 수 있어요</p>
         <button id="sampleBtn" class="primary small">샘플로 체험하기</button>
       </div>
       <div class="screen-busy" id="screenBusy" hidden><span class="spin"></span><span id="busyText">준비 중…</span></div>
@@ -53,13 +53,31 @@
   <main class="panels">
     <!-- ① 사진 -->
     <section class="panel" id="p-photo" data-panel="photo">
-      <div class="panel-head"><h2>사진</h2><p>순서대로 영상에 들어가요. 화살표로 순서를 바꿀 수 있어요.</p></div>
-      <label class="drop">
-        <input type="file" id="photoInput" accept="image/*" multiple>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
-        <span>사진 추가 <small>(여러 장 선택 가능)</small></span>
-      </label>
+      <div class="panel-head"><h2>사진 · 동영상</h2><p>순서대로 영상에 들어가요. 화살표로 순서를 바꿀 수 있어요.</p></div>
+      <div class="drop-row">
+        <label class="drop">
+          <input type="file" id="photoInput" accept="image/*" multiple>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM6 17l4-5 3 3.5 2-2.5 3 4z"/></svg>
+          <span>사진 추가<small>여러 장 가능</small></span>
+        </label>
+        <label class="drop">
+          <input type="file" id="videoInput" accept="video/*" multiple>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v12H4zM16 10l5-3v10l-5-3z"/></svg>
+          <span>동영상 추가<small>MP4 권장</small></span>
+        </label>
+      </div>
       <ol class="photo-grid" id="photoGrid"></ol>
+      <div class="group" data-show="hasVid=true">
+        <h3>🎬 동영상</h3>
+        <div class="field"><span class="lbl">동영상 길이</span>
+          <div class="seg" data-k="clipMax"><button type="button" data-v="5">5초</button><button type="button" data-v="10">10초</button><button type="button" data-v="15">15초</button><button type="button" data-v="0">전체</button></div>
+        </div>
+        <div class="field col"><span class="lbl">동영상 소리</span>
+          <div class="seg wide" data-k="clipSound"><button type="button" data-v="clip">🔊 영상 속 소리</button><button type="button" data-v="bgm">🎵 배경음악만</button></div>
+          <p class="hint" data-show="clipSound=clip">영상이 나올 땐 영상 속 소리가, 사진이 나올 땐 배경음악이 나와요.</p>
+          <p class="hint" data-show="clipSound=bgm">영상 속 소리는 끄고 처음부터 끝까지 배경음악만 나와요.</p>
+        </div>
+      </div>
       <div class="group">
         <h3>사진 연출</h3>
         <div class="field"><label for="perDur">사진 1장당 시간</label><input type="range" id="perDur" data-k="perDur" min="2" max="10" step="0.5"><output data-o="perDur"></output></div>
@@ -74,15 +92,31 @@
 
     <!-- ② 음악 -->
     <section class="panel" id="p-music" data-panel="music" hidden>
-      <div class="panel-head"><h2>배경음악</h2><p>MP3·M4A·WAV. 아이폰은 ‘파일’ 앱에 저장된 음악을 고를 수 있어요.</p></div>
+      <div class="panel-head"><h2>배경음악</h2><p>기본 음악을 고르거나, 내 음악 파일(MP3·M4A·WAV)을 넣으세요.</p></div>
+      <div class="music-card" id="musicCard" hidden>
+        <div class="mc-row"><span class="now">지금 음악</span><strong id="musicName"></strong><button class="ghost small" id="musicRemove">빼기</button></div>
+        <dl class="stats"><div><dt>길이</dt><dd id="musicDur" class="tnum"></dd></div><div><dt>템포</dt><dd id="musicBpm" class="tnum"></dd></div></dl>
+      </div>
+      <div class="group">
+        <h3>🎵 기본 음악 <small>(앱이 직접 연주 · 저작권 걱정 없음)</small></h3>
+        <div id="builtinList" class="builtin"></div>
+        <p class="hint">실제 가수의 팝송은 저작권 때문에 넣을 수 없어서, 팝 느낌의 반주를 만들어 넣었어요.</p>
+      </div>
       <label class="drop">
         <input type="file" id="musicInput" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3z"/></svg>
-        <span id="musicDropText">음악 선택</span>
+        <span id="musicDropText">내 음악 파일 선택</span>
       </label>
-      <div class="music-card" id="musicCard" hidden>
-        <div class="mc-row"><strong id="musicName"></strong><button class="ghost small" id="musicRemove">빼기</button></div>
-        <dl class="stats"><div><dt>길이</dt><dd id="musicDur" class="tnum"></dd></div><div><dt>템포</dt><dd id="musicBpm" class="tnum"></dd></div></dl>
+      <div class="group">
+        <h3>🔎 픽사베이에서 무료 음악 찾기</h3>
+        <div class="pixa" id="pixaChips"></div>
+        <div class="pixa-row"><input type="text" id="pixaQ" placeholder="찾을 말 (영어가 잘 찾아져요 · 예: happy)"><button type="button" class="ghost small" id="pixaGo">찾기</button></div>
+        <ol class="howto">
+          <li>버튼을 누르면 픽사베이 음악 페이지가 열려요.</li>
+          <li>마음에 드는 곡의 <b>다운로드</b>를 눌러 휴대폰에 저장해요.</li>
+          <li>이 화면으로 돌아와 위의 <b>내 음악 파일 선택</b>으로 넣어요.</li>
+        </ol>
+        <p class="hint">픽사베이 음악은 대부분 무료로 쓸 수 있지만, 곡마다 사용 안내를 꼭 확인하세요.</p>
       </div>
       <div class="group">
         <h3>길이와 박자</h3>
@@ -104,6 +138,21 @@
         <button type="button" data-v="bulk">한 번에 쓰기</button><button type="button" data-v="per">사진마다 쓰기</button><button type="button" data-v="file">파일 (TXT·SRT)</button>
       </div>
       <div data-show="textMode=bulk">
+        <div class="group cap">
+          <h3>✨ 글귀 자동으로 채우기</h3>
+          <p class="hint">주제를 누르면 사진 수만큼 어울리는 글귀가 들어가요. 다시 누르면 다른 글귀로 바뀌어요.</p>
+          <div class="chips" id="capThemes"></div>
+          <div class="btn-row">
+            <button type="button" class="ghost small" id="capFill">🔀 다른 글귀로</button>
+          </div>
+          <div class="gpt">
+            <p class="hint"><b>🤖 ChatGPT가 사진을 보고 쓰게 하기</b><br>① 아래 버튼 → 공유 목록에서 ChatGPT 선택 (사진·질문이 같이 가요) ② ChatGPT 답을 길게 눌러 복사 ③ 이 화면에서 ‘붙여넣기’</p>
+            <div class="btn-row">
+              <button type="button" class="primary small" id="capGpt">🤖 ChatGPT로 사진 보내기</button>
+              <button type="button" class="ghost small" id="capPaste">📋 ChatGPT 답 붙여넣기</button>
+            </div>
+          </div>
+        </div>
         <p class="hint">빈 줄(엔터 두 번)로 나눈 글이 1장, 2장, 3장… 순서대로 들어가요. 글이 사진보다 많으면 사진이 반복돼요.</p>
         <textarea id="bulkText" data-k="bulkText" rows="12" spellcheck="false"></textarea>
         <p class="hint tnum" id="blockCount"></p>
@@ -125,6 +174,30 @@
     <!-- ④ 꾸미기 -->
     <section class="panel" id="p-style" data-panel="style" hidden>
       <div class="panel-head"><h2>꾸미기</h2></div>
+      <div class="group">
+        <h3>🪪 내 명함 (원형 얼굴 + 명함)</h3>
+        <div class="field col"><span class="lbl">명함 나오는 때</span>
+          <div class="seg wide" data-k="cardMode"><button type="button" data-v="ends">처음과 끝</button><button type="button" data-v="always">계속</button><button type="button" data-v="end">끝에만</button><button type="button" data-v="none">안 나옴</button></div>
+        </div>
+        <div data-show="cardMode=none" class="hint">명함을 넣지 않아요.</div>
+        <div class="cardbox" id="cardBox">
+          <div class="face-row">
+            <img id="faceThumb" alt="얼굴 사진" hidden>
+            <label class="drop slim"><input type="file" id="faceFile" accept="image/*"><span id="faceText">얼굴 사진 선택 (선택)</span></label>
+            <button type="button" class="ghost small" id="faceRemove" data-show="hasFace=true">빼기</button>
+          </div>
+          <div class="two">
+            <label>회사명<input type="text" id="card_company" placeholder="예: 삼성생명"></label>
+            <label>지점명<input type="text" id="card_branch" placeholder="예: ○○지점"></label>
+            <label>직함<input type="text" id="card_role" placeholder="예: FC, 팀장"></label>
+            <label>이름<input type="text" id="card_name" placeholder="예: 홍길동"></label>
+            <label class="full">📞 전화번호 (선택)<input type="text" id="card_phone" inputmode="tel" placeholder="010-1234-5678"></label>
+            <label class="full">💬 명함 문구 (선택)<input type="text" id="card_msg" placeholder="예: 언제든 편하게 연락 주세요"></label>
+          </div>
+          <div class="chips small-chips" id="cardMsgChips"><button type="button">언제든 편하게 연락 주세요</button><button type="button">보장분석 무료 상담</button><button type="button">고객님의 든든한 평생 파트너</button></div>
+          <p class="hint">비워 둔 칸은 명함에 넣지 않아요. 한 번 쓰면 이 휴대폰에 기억돼요. 글자는 그대로 정확하게 들어가요.</p>
+        </div>
+      </div>
       <div class="group">
         <h3>글자</h3>
         <div class="field"><label for="font">글꼴</label><select id="font" data-k="font" data-opt="fonts"></select></div>
@@ -196,6 +269,58 @@
       </div>
       <p class="foot">모든 작업은 이 기기 안에서만 처리돼요. 사진과 음악은 어디에도 업로드되지 않아요.</p>
     </section>
+
+    <!-- 🔗 주소 · QR코드 보내기 -->
+    <details class="share" id="shareBox">
+      <summary>🔗 BK쇼츠 주소 · QR코드 보내기</summary>
+      <p class="hint">카톡에 주소만 보내거나, QR코드 이미지를 보내 주세요.</p>
+      <input id="appUrl" type="text" readonly value="https://bangkeukryul.github.io/bk-shorts/">
+      <div class="admin-2">
+        <button type="button" class="primary small" id="copyUrlBtn">📋 주소 복사</button>
+        <button type="button" class="ghost small" id="copyMsgBtn">📋 안내 문구 복사</button>
+      </div>
+      <img id="qrImg" alt="BK쇼츠 QR코드">
+      <div class="admin-2">
+        <button type="button" class="ghost small" id="qrSave">⬇ QR코드 크게 저장</button>
+        <button type="button" class="kakao small" id="qrShareBtn">💬 QR 카톡 보내기</button>
+      </div>
+      <p class="hint" id="qrMsg"></p>
+    </details>
+
+    <!-- 🛠 관리자 메뉴 (만든 사람용) -->
+    <details class="admin" id="adminBox" hidden>
+      <summary>🛠 관리자 메뉴 (만든 사람용 · 백업)</summary>
+      <p class="hint">지금 버전: <b id="adminVer" class="tnum">…</b></p>
+      <p class="hint">지금 사이트에 올라가 있는 <b>파일 전체</b>를 날짜가 붙은 압축파일 하나로 휴대폰에 저장해요. <b>새 파일을 올리기 전에 꼭 한 번</b> 눌러 두세요.</p>
+      <div class="admin-urls">
+        <b>🔗 관리용 주소</b>
+        <p>① 파일 올리기: <b>github.com/bangkeukryul/bk-shorts/upload/main</b><br>
+        ② 저장소(파일 목록·변경 기록): <b>github.com/bangkeukryul/bk-shorts</b><br>
+        ③ 관리자 메뉴 켜기: <b>bangkeukryul.github.io/bk-shorts/?bkadmin</b><br>
+        ④ 앱 주소(공유용): <b>bangkeukryul.github.io/bk-shorts</b></p>
+        <button type="button" class="ghost block-s" id="copyAdminAll">📋 관리용 주소 전체 복사 (카톡 ‘나와의 채팅’에 저장)</button>
+        <div class="admin-2">
+          <button type="button" class="ghost small" id="copyUpload">📋 ① 올리기 주소만 복사</button>
+          <a class="button ghost small" href="https://github.com/bangkeukryul/bk-shorts/upload/main" target="_blank" rel="noopener">↗ 올리기 화면 열기</a>
+        </div>
+        <p class="hint" id="adminCopyMsg"></p>
+      </div>
+      <button type="button" class="primary block-s" id="backupBtn">💾 지금 버전 백업하기</button>
+      <p class="hint" id="backupMsg"></p>
+      <button type="button" class="ghost block-s" id="adminOff">🙈 이 휴대폰에서 관리자 메뉴 숨기기</button>
+      <div class="admin-tip">
+        <b>📁 어디에 저장되나요?</b><br>휴대폰 <b>내 파일 → 다운로드</b> 폴더에 <b>BK쇼츠_백업_날짜_시간.zip</b> 이름으로 저장돼요.<br>
+        가끔 <b>카톡 ‘나와의 채팅’</b>이나 <b>구글 드라이브</b>에도 올려 두면 더 안전해요.<br><br>
+        <b>🚑 업데이트 후 문제가 생기면 (되돌리기)</b>
+        <ol>
+          <li><b>내 파일 → 다운로드</b>에서 문제가 생기기 전 날짜의 백업 zip을 <b>길게 누르기</b> → <b>압축 풀기</b> → <b>추출</b>.</li>
+          <li>같은 이름의 폴더 안에 파일들이 들어 있어요.</li>
+          <li><b>github.com/bangkeukryul/bk-shorts/upload/main</b> 접속 → <b>choose your files</b> → 그 폴더의 <b>파일을 모두 선택</b> (백업안내.txt 는 빼도 돼요) → <b>Commit changes</b>.</li>
+          <li>1~2분 뒤 앱을 닫았다가 <b>두 번</b> 열면 예전 버전으로 돌아와 있어요.</li>
+        </ol>
+      </div>
+    </details>
+    <footer class="foot-brand"><button type="button" id="bkFoot" aria-label="BK Agent">BK Agent · 비케이</button></footer>
   </main>
 
   <nav class="tabbar" aria-label="단계">
@@ -216,6 +341,10 @@
 <script src="mp4mux.js"></script>
 <script src="engine.js"></script>
 <script src="samples.js"></script>
+<script src="music.js"></script>
+<script src="captions.js"></script>
 <script src="app.js"></script>
+<script src="share.js"></script>
+<script src="admin.js"></script>
 </body>
 </html>

@@ -1,9 +1,9 @@
-/* sw.js — 오프라인 캐시: 앱 파일은 캐시 우선, 구글 폰트는 받아 둔 것 재사용 */
-const VERSION = 'bk-shorts-v1';
+/* sw.js — 오프라인 캐시: 앱 파일은 인터넷 우선(업데이트 바로 반영) · 끊기면 저장본, 구글 폰트는 받아 둔 것 재사용 */
+const VERSION = 'bk-shorts-v4';
 const FONTS = 'bk-shorts-fonts';
 /* 같은 주소(bangkeukryul.github.io)를 BK톡톡과 함께 쓰므로, 지울 때는 BK쇼츠 것('bk-shorts-'로 시작)만 지운다 */
 const APP = ['./', './index.html', './style.css', './app.js', './engine.js', './mp4mux.js', './samples.js',
-  './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
+  './music.js', './captions.js', './admin.js', './share.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(APP)).then(() => self.skipWaiting()));
@@ -25,11 +25,9 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.origin !== self.location.origin) return;
-  e.respondWith(caches.open(VERSION).then(c => c.match(req, { ignoreSearch: true })).then(hit => {
-    const net = fetch(req).then(res => {
-      if (res.ok) caches.open(VERSION).then(c => c.put(req, res.clone()));
-      return res;
-    }).catch(() => hit || (req.mode === 'navigate' ? caches.open(VERSION).then(c => c.match('./index.html')) : undefined));
-    return hit || net;
-  }));
+  e.respondWith(fetch(req).then(res => {
+    if (res.ok) { const cp = res.clone(); caches.open(VERSION).then(c => c.put(req, cp)); }
+    return res;
+  }).catch(() => caches.open(VERSION).then(c => c.match(req, { ignoreSearch: true }))
+    .then(hit => hit || (req.mode === 'navigate' ? caches.open(VERSION).then(c => c.match('./index.html')) : undefined))));
 });

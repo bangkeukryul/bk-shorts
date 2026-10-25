@@ -230,6 +230,130 @@
     }
   }
 
+  // ═══════════════════════════════════════════════
+  // 동영상 장면: 매 프레임 영상 화면을 세로 캔버스에 맞춰 그림
+  // ═══════════════════════════════════════════════
+  const VFILTER = { warm: 'sepia(0.22) saturate(1.15) brightness(1.03)', vivid: 'saturate(1.3) contrast(1.08)',
+    glow: 'brightness(1.08) saturate(1.1) contrast(0.95)', vintage: 'sepia(0.45) contrast(0.9) brightness(1.05)', bw: 'grayscale(1) contrast(1.12)' };
+  class VideoPainter {
+    constructor(BW, BH) {
+      this.BW = BW; this.BH = BH;
+      this.c = mkCanvas(BW, BH); this.x = this.c.getContext('2d', { alpha: false });
+      this.x.imageSmoothingQuality = 'high';
+      this.s1 = mkCanvas(BW / 16, BH / 16); this.s2 = mkCanvas(BW / 4, BH / 4);
+      this.canFilter = typeof this.x.filter === 'string';
+    }
+    paint(v, fit, filter) {
+      const x = this.x, BW = this.BW, BH = this.BH;
+      const iw = v.videoWidth, ih = v.videoHeight;
+      if (!iw || !ih || v.readyState < 2) return false;
+      let mode = fit;
+      if (fit === 'auto') mode = Math.abs((iw / ih) / (BW / BH) - 1) < 0.25 ? 'cover' : 'blur';
+      const f = this.canFilter && VFILTER[filter] ? VFILTER[filter] : 'none';
+      if (mode === 'cover') {
+        if (this.canFilter) x.filter = f;
+        drawCover(x, v, iw, ih, BW, BH, 0.45);
+      } else {
+        const a = this.s1.getContext('2d'), b = this.s2.getContext('2d');
+        drawCover(a, v, iw, ih, this.s1.width, this.s1.height);
+        b.imageSmoothingQuality = 'high';
+        b.drawImage(this.s1, 0, 0, this.s2.width, this.s2.height);
+        if (this.canFilter) x.filter = f;
+        x.drawImage(this.s2, 0, 0, BW, BH);
+        if (this.canFilter) x.filter = 'none';
+        x.fillStyle = 'rgba(0,0,0,0.38)';
+        x.fillRect(0, 0, BW, BH);
+        if (this.canFilter) x.filter = f;
+        const s = Math.min(BW / iw, BH / ih);
+        x.drawImage(v, (BW - iw * s) / 2, (BH - ih * s) / 2, iw * s, ih * s);
+      }
+      if (this.canFilter) x.filter = 'none';
+      return true;
+    }
+    free() { freeCanvas(this.c); freeCanvas(this.s1); freeCanvas(this.s2); }
+  }
+
+  // ═══════════════════════════════════════════════
+  // 내 명함 (원형 얼굴 사진 + 명함) — 코드로 그려서 글자가 정확함
+  // ═══════════════════════════════════════════════
+  function fitFont(x, text, weight, px, maxW, fam) {
+    let p = px;
+    for (let i = 0; i < 30; i++) {
+      x.font = `${weight} ${Math.round(p)}px ${fam}`;
+      if (x.measureText(text).width <= maxW || p < 10) break;
+      p *= 0.93;
+    }
+    return p;
+  }
+  function makeCard(info, W, face) {
+    const fam = `"Noto Sans KR", ${SYS_STACK}`;
+    const hasFace = !!face;
+    const D = Math.round(W * 0.27);                       // 얼굴 원 지름
+    const ch = Math.round(D * 0.84);                       // 명함 높이
+    const cw = Math.round(hasFace ? W * 0.86 - D * 0.45 : W * 0.78);
+    const totalW = hasFace ? Math.round(D * 0.45 + cw) : cw;
+    const pad = Math.round(W * 0.03);
+    const c = mkCanvas(totalW + pad * 2, D + pad * 2);
+    const x = c.getContext('2d');
+    const cardL = pad + (hasFace ? Math.round(D * 0.45) : 0), cardT = pad + Math.round((D - ch) / 2);
+    // 명함 본체
+    x.save();
+    x.shadowColor = 'rgba(0,0,0,0.35)'; x.shadowBlur = W * 0.02; x.shadowOffsetY = W * 0.006;
+    roundRectPath(x, x, cardL, cardT, cw, ch, W * 0.028);
+    const gr = x.createLinearGradient(0, cardT, 0, cardT + ch);
+    gr.addColorStop(0, '#fffdf6'); gr.addColorStop(1, '#f6eedb');
+    x.fillStyle = gr; x.fill();
+    x.restore();
+    roundRectPath(x, x, cardL + W * 0.008, cardT + W * 0.008, cw - W * 0.016, ch - W * 0.016, W * 0.022);
+    x.strokeStyle = '#c9a24a'; x.lineWidth = Math.max(1, W * 0.0035); x.stroke();
+    // 글자
+    const tx = cardL + (hasFace ? D * 0.62 : W * 0.05), maxW = cardL + cw - tx - W * 0.04;
+    const lines = [];
+    const top = [info.company, info.branch].filter(Boolean).join(' ');
+    if (top) lines.push({ t: top, w: 700, px: W * 0.033, col: '#9a7425' });
+    const nm = [info.role, info.name].filter(Boolean);
+    if (nm.length) lines.push({ t: nm.join('  '), w: 800, px: W * 0.056, col: '#2a2140', name: true });
+    if (info.phone) lines.push({ t: info.phone, w: 700, px: W * 0.04, col: '#3b3355' });
+    if (info.msg) lines.push({ t: info.msg, w: 500, px: W * 0.03, col: '#6e6488' });
+    lines.forEach(l => { l.px = fitFont(x, l.t, l.w, l.px, maxW, fam); });
+    const gap = W * 0.012;
+    const totH = lines.reduce((a, l) => a + l.px * 1.12, 0) + gap * Math.max(0, lines.length - 1);
+    let y = cardT + (ch - totH) / 2;
+    x.textBaseline = 'top';
+    for (const l of lines) {
+      x.font = `${l.w} ${Math.round(l.px)}px ${fam}`;
+      x.fillStyle = l.col;
+      if (l.name && nm.length === 2) {
+        // 직함은 작게, 이름은 크게
+        const rp = l.px * 0.62;
+        x.font = `700 ${Math.round(rp)}px ${fam}`;
+        const rw = x.measureText(info.role + ' ').width;
+        x.fillStyle = '#6e6488';
+        x.fillText(info.role, tx, y + (l.px - rp) * 0.8);
+        x.font = `${l.w} ${Math.round(l.px)}px ${fam}`;
+        x.fillStyle = l.col;
+        x.fillText(info.name, tx + rw, y);
+      } else x.fillText(l.t, tx, y);
+      y += l.px * 1.12 + gap;
+    }
+    // 원형 얼굴
+    if (hasFace) {
+      const cx = pad + D / 2, cy = pad + D / 2, R = D / 2;
+      x.save();
+      x.shadowColor = 'rgba(0,0,0,0.4)'; x.shadowBlur = W * 0.02;
+      x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fillStyle = '#c9a24a'; x.fill();
+      x.restore();
+      x.beginPath(); x.arc(cx, cy, R - W * 0.006, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill();
+      x.save();
+      x.beginPath(); x.arc(cx, cy, R - W * 0.013, 0, Math.PI * 2); x.clip();
+      const iw = face.naturalWidth || face.width, ih = face.naturalHeight || face.height;
+      const r2 = (R - W * 0.013) * 2, sc = Math.max(r2 / iw, r2 / ih);
+      x.drawImage(face, cx - iw * sc / 2, cy - ih * sc * 0.42, iw * sc, ih * sc);
+      x.restore();
+    }
+    return c;
+  }
+
   class BaseCache {
     constructor(limit) { this.limit = limit; this.map = new Map(); this.pending = new Map(); }
     key(photo, BW, BH, fit, filter) { return `${photo.id}|${BW}x${BH}|${fit}|${filter}`; }
@@ -679,8 +803,12 @@
       this.bounds = sc.map(x => x.start).concat([pj.total]);
       const minLen = Math.min(...sc.map(x => x.end - x.start));
       this.T = pj.transDur >= 1 / 60 ? Math.min(pj.transDur, 0.45 * minLen) : 0;
+      this.vkey = pj.exporting ? 'xel' : 'el';
+      this.vp = new Map();
+      this.card = null;
       this.motions = sc.map((_, k) => {
         const m = pj.motion;
+        if (this.isVid(k)) return 'none';
         if (m === 'random') return MOTION_CYCLE[k % MOTION_CYCLE.length];
         if (m === 'pan_h') return k % 2 ? 'pan_left' : 'pan_right';
         if (m === 'pan_v') return k % 2 ? 'pan_down' : 'pan_up';
@@ -703,13 +831,44 @@
       await ensureFont(fontDef(st.font), texts);
       if (this.pj.topText.trim()) this.fixed.push(layoutText(this.pj.topText, st, this.W, this.H, this.s, 0.10, 0.62));
       if (this.pj.bottomText.trim()) this.fixed.push(layoutText(this.pj.bottomText, st, this.W, this.H, this.s, 0.865, 0.58));
+      const cd = this.pj.card;
+      if (cd && cd.mode !== 'none' && (cd.info.name || cd.info.company || cd.info.phone)) {
+        const i = cd.info;
+        await ensureFont({ family: 'Noto Sans KR', weight: 800, gf: 'Noto+Sans+KR:wght@500;700;800' }, Object.values(i).join('') + '0123456789-');
+        this.card = makeCard(i, this.W, cd.face || null);
+      }
     }
 
     destroy() {
       for (const L of this.layouts.values()) L.lines.forEach(l => freeCanvas(l.canvas));
       for (const L of this.fixed) L.lines.forEach(l => freeCanvas(l.canvas));
       for (const c of this.typing.values()) freeCanvas(c);
-      freeCanvas(this.frame); freeCanvas(this.vig);
+      for (const v of this.vp.values()) v.free();
+      freeCanvas(this.frame); freeCanvas(this.vig); freeCanvas(this.card);
+    }
+
+    item(k) { return this.pj.photos[this.pj.scenes[k].img]; }
+    isVid(k) { const it = this.item(k); return !!(it && it.kind === 'video'); }
+    vidEl(k) { return this.item(k)[this.vkey]; }
+    /** 장면 k 에서 시각 t 일 때 영상 안의 재생 위치 */
+    vidTime(k, t) {
+      const sc = this.pj.scenes[k], it = this.item(k);
+      const cs = sc.clipStart || 0, len = sc.end - sc.start;
+      return clamp(cs + (t - sc.start), cs, Math.max(cs, Math.min(cs + len, (it.dur || len) ) - 0.05));
+    }
+    /** 미리보기 재생 중: 보이는 영상만 재생, 나머지는 멈춤 */
+    syncPlay(t, playing) {
+      const act = new Map();
+      if (playing) for (const k of this.scenesAt(t)) if (this.isVid(k)) act.set(this.vidEl(k), this.vidTime(k, t));
+      for (const it of this.pj.photos) {
+        if (it.kind !== 'video') continue;
+        const v = it[this.vkey];
+        if (act.has(v)) {
+          const want = act.get(v);
+          if (Math.abs(v.currentTime - want) > 0.35) v.currentTime = want;
+          if (v.paused) v.play().catch(() => {});
+        } else if (!v.paused) v.pause();
+      }
     }
 
     sceneIndex(t) {
@@ -726,16 +885,29 @@
       return ks;
     }
     baseFor(k) {
-      const p = this.pj.photos[this.pj.scenes[k].img];
+      const p = this.item(k);
+      if (p.kind === 'video') {
+        let vp = this.vp.get(k);
+        if (!vp) {
+          if (this.vp.size >= 3) { const [k0, v0] = this.vp.entries().next().value; v0.free(); this.vp.delete(k0); }
+          vp = new VideoPainter(this.BW, this.BH); this.vp.set(k, vp);
+        }
+        if (vp.paint(p[this.vkey], this.pj.fit, this.pj.filter)) vp.ok = true;
+        return vp.ok ? vp.c : null;
+      }
       return this.cache.peek(this.cache.key(p, this.BW, this.BH, this.pj.fit, this.pj.filter));
     }
     loadScene(k) {
-      const p = this.pj.photos[this.pj.scenes[k].img];
+      const p = this.item(k);
+      if (p.kind === 'video') return Promise.resolve(null);
       return this.cache.get(p, this.BW, this.BH, this.pj.fit, this.pj.filter);
     }
     async ensureFor(t) {
       const ks = this.scenesAt(t);
-      for (const k of ks) await this.loadScene(k);
+      for (const k of ks) {
+        if (this.isVid(k)) { const v = this.vidEl(k); if (!v.paused) v.pause(); await seekVideo(v, this.vidTime(k, t)); }
+        else await this.loadScene(k);
+      }
       const nxt = this.sceneIndex(t) + 1;
       if (nxt < this.pj.scenes.length) this.loadScene(nxt).catch(() => {});
       if (this.ov && this.ov.duration) await seekVideo(this.ov, t % this.ov.duration);
@@ -857,6 +1029,31 @@
       x.globalAlpha = 1;
     }
 
+    /** 명함이 보이는 정도(0~1) — 처음과 끝 / 끝에만 / 계속 */
+    cardAlpha(t) {
+      const mode = this.pj.card.mode, T = this.pj.total;
+      const win = (a, b) => clamp(Math.min((t - a) / 0.5, (b - t) / 0.5), 0, 1);
+      if (mode === 'always') return win(0.3, T + 1);
+      const endA = Math.max(0, T - 4.5);
+      if (mode === 'end') return win(endA, T + 1);
+      if (T < 10) return win(0.3, T + 1);
+      return Math.max(win(0.3, Math.min(4, endA - 1)), win(endA, T + 1));
+    }
+    drawCard(x, t) {
+      const a = this.cardAlpha(t);
+      if (a <= 0.003) return;
+      const c = this.card, W = this.W, H = this.H;
+      const always = this.pj.card.mode === 'always';
+      const sc = always ? 0.8 : 1;
+      const w = c.width * sc, h = c.height * sc;
+      let cy = always ? 0.835 : 0.75;
+      if (this.pj.bottomText.trim()) cy -= 0.07;
+      const yy = H * cy - h / 2 + (1 - ease(a)) * 30 * this.s;
+      x.globalAlpha = a;
+      x.drawImage(c, (W - w) / 2, yy, w, h);
+      x.globalAlpha = 1;
+    }
+
     draw(x, t) {
       const pj = this.pj, W = this.W, H = this.H;
       this.compose(x, t);
@@ -881,6 +1078,7 @@
       const fa = ease(t / 0.8);
       for (const L of this.fixed) for (const l of L.lines) { x.globalAlpha = fa; x.drawImage(l.canvas, l.x, l.y); }
       x.globalAlpha = 1;
+      if (this.card) this.drawCard(x, t);
       if (pj.fadeEdges) {
         const gch = Math.min(1, t / 0.35, (pj.total - t) / 1.0);
         if (gch < 1) { x.globalAlpha = clamp(1 - gch, 0, 1); x.fillStyle = '#000'; x.fillRect(0, 0, W, H); x.globalAlpha = 1; }
@@ -1022,20 +1220,71 @@
     return { buffer, duration: buffer.duration, bpm, beats };
   }
 
+  function analyzeBuffer(buffer) {
+    let bpm = null, beats = [];
+    try { ({ bpm, beats } = detectBeats(buffer)); } catch (e) { console.warn(e); }
+    return { buffer, duration: buffer.duration, bpm, beats };
+  }
+  /** 동영상 파일 속 소리 꺼내기 (소리가 없거나 못 읽으면 null) */
+  async function decodeClipAudio(file) {
+    try {
+      if (file.size > 400 * 1048576) return null;
+      return await decodeAudio(file);
+    } catch (e) { return null; }
+  }
+
+  /**
+   * a = { buffer(배경음악·없으면 null), start, volume, fadeIn, fadeOut,
+   *       clips:[{buffer, at, offset, dur}] (영상 속 소리), duck:[[시작,끝]] (이 구간엔 배경음악 끄기) }
+   */
   async function renderAudio(a, total, sr = 48000) {
     const len = Math.max(1, Math.ceil(total * sr));
     const oc = new OAC(2, len, sr);
-    const src = oc.createBufferSource();
-    src.buffer = a.buffer;
-    src.loop = true;
-    const gn = oc.createGain();
-    const vol = a.volume, fi = Math.min(a.fadeIn, total / 4), fo = Math.min(a.fadeOut, total / 2);
-    gn.gain.setValueAtTime(fi > 0 ? 0 : vol, 0);
-    if (fi > 0) gn.gain.linearRampToValueAtTime(vol, fi);
-    gn.gain.setValueAtTime(vol, Math.max(fi, total - fo));
-    if (fo > 0) gn.gain.linearRampToValueAtTime(0, total);
-    src.connect(gn); gn.connect(oc.destination);
-    src.start(0, Math.min(Math.max(0, a.start), a.buffer.duration - 0.01));
+    const master = oc.createGain();
+    const fi = Math.min(a.fadeIn || 0, total / 4), fo = Math.min(a.fadeOut || 0, total / 2);
+    master.gain.setValueAtTime(fi > 0 ? 0 : 1, 0);
+    if (fi > 0) master.gain.linearRampToValueAtTime(1, fi);
+    master.gain.setValueAtTime(1, Math.max(fi, total - fo));
+    if (fo > 0) master.gain.linearRampToValueAtTime(0, total);
+    master.connect(oc.destination);
+    if (a.buffer) {
+      const src = oc.createBufferSource();
+      src.buffer = a.buffer;
+      src.loop = true;
+      const gn = oc.createGain();
+      gn.gain.value = a.volume;
+      const duck = oc.createGain();
+      duck.gain.setValueAtTime(1, 0);
+      // 겹치거나 가까운 구간은 하나로 합침
+      const zones = (a.duck || []).slice().sort((p, q) => p[0] - q[0]).reduce((acc, z) => {
+        const l = acc[acc.length - 1];
+        if (l && z[0] - l[1] < 0.8) l[1] = Math.max(l[1], z[1]); else acc.push([z[0], z[1]]);
+        return acc;
+      }, []);
+      for (const [s, e] of zones) {
+        const s0 = Math.max(0, s - 0.3);
+        duck.gain.setValueAtTime(s <= 0.05 ? 0 : 1, s0);
+        duck.gain.linearRampToValueAtTime(0, Math.max(s0 + 0.01, s));
+        if (e < total - 0.05) { duck.gain.setValueAtTime(0, e); duck.gain.linearRampToValueAtTime(1, e + 0.3); }
+      }
+      src.connect(gn); gn.connect(duck); duck.connect(master);
+      src.start(0, Math.min(Math.max(0, a.start), a.buffer.duration - 0.01));
+    }
+    for (const c of (a.clips || [])) {
+      if (!c.buffer || c.dur <= 0.05 || c.at >= total) continue;
+      const off = Math.min(Math.max(0, c.offset), Math.max(0, c.buffer.duration - 0.05));
+      const dur = Math.min(c.dur, c.buffer.duration - off, total - c.at);
+      if (dur <= 0.05) continue;
+      const s = oc.createBufferSource();
+      s.buffer = c.buffer;
+      const g2 = oc.createGain(), f = Math.min(0.08, dur / 4), v = a.clipVolume == null ? 1 : a.clipVolume;
+      g2.gain.setValueAtTime(0, c.at);
+      g2.gain.linearRampToValueAtTime(v, c.at + f);
+      g2.gain.setValueAtTime(v, c.at + dur - f);
+      g2.gain.linearRampToValueAtTime(0, c.at + dur);
+      s.connect(g2); g2.connect(master);
+      s.start(c.at, off, dur);
+    }
     return await new Promise((res, rej) => {
       oc.oncomplete = e => res(e.renderedBuffer);
       const p = oc.startRendering();
@@ -1159,6 +1408,7 @@
 
   g.ENG = {
     OPT, PARTICLES, BaseCache, Renderer, planScenes, subsFromScenes, parseSrt, splitBlocks,
-    analyzeAudio, renderAudio, exportVideo, supportInfo, fontDef, setCustomFont, ensureFont, loadImage, mkCanvas,
+    analyzeAudio, analyzeBuffer, decodeClipAudio, renderAudio, exportVideo, supportInfo, fontDef, setCustomFont, ensureFont, loadImage, mkCanvas,
+    seekVideo,
   };
 })(window);
