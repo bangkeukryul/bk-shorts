@@ -27,6 +27,7 @@
     font: 'noto', size: 72, color: '#ffffff', stroke: '#000000', strokeW: 7, shadow: true, box: false,
     boxColor: '#000000', boxOp: 0.45, align: 'center', yPos: 50, anim: 'none', animV: 1, lineSp: 1.4,
     topFont: 'same', topSize: 46, topColor: '#ffffff', botFont: 'same', botSize: 42, botColor: '#ffffff',
+    topY: 10, botY: 95, cardY: 83, cardTheme: 'blue', posV: 1,
     particles: ['glints', 'hearts'], density: 1, frame: 'none', vignette: 0.25, ovOp: 0.8, fadeEdges: true,
     res: '1080', fps: '30', hq: false,
     clipMax: '10', clipSound: 'clip', capTheme: 'life', cardMode: 'always', cardV: 2,
@@ -39,6 +40,7 @@
       if (s.frame === 'custom') s.frame = 'none';
       if (s.cardV !== 2) { s.cardMode = 'always'; s.cardV = 2; } // 명함 기본값을 '계속'으로 바꿈 (2026-10-25)
       if (s.animV !== 1) { s.anim = 'none'; s.animV = 1; }      // 글귀 효과 기본값을 '없음'으로 바꿈 (2026-10-25)
+      if (s.posV !== 1) { s.cardY = 83; s.botY = 95; s.posV = 1; } // 명함을 더 아래로 (2026-10-25)
       return Object.assign({}, DEF, s);
     } catch (e) { return Object.assign({}, DEF); }
   }
@@ -75,7 +77,7 @@
     perDur: v => `${v}초`, strength: v => `${Math.round(v * 100)}%`, transDur: v => (v > 0 ? `${v}초` : '없음'),
     bgmStart: v => fmtTime(v), maxLen: v => (v > 0 ? `${v}초` : '제한 없음'), volume: v => `${Math.round(v * 100)}%`,
     fadeOut: v => (v > 0 ? `${v}초` : '없음'), size: v => `${v}`, strokeW: v => `${v}`, boxOp: v => `${Math.round(v * 100)}%`,
-    yPos: v => `${v}%`, topSize: v => `${v}`, botSize: v => `${v}`, lineSp: v => `×${v}`, density: v => `×${v}`, vignette: v => (v > 0 ? `${Math.round(v * 100)}%` : '없음'),
+    yPos: v => `${v}%`, topSize: v => `${v}`, botSize: v => `${v}`, topY: v => `${v}%`, botY: v => `${v}%`, cardY: v => `${v}%`, lineSp: v => `×${v}`, density: v => `×${v}`, vignette: v => (v > 0 ? `${Math.round(v * 100)}%` : '없음'),
     ovOp: v => `${Math.round(v * 100)}%`,
   };
 
@@ -551,7 +553,7 @@
       $('#cardPrevEmpty').hidden = has; $('#cardPrev').hidden = !has;
       if (has) {
         await E.ensureFont({ family: 'Noto Sans KR', weight: 800, gf: 'Noto+Sans+KR:wght@500;700;800' }, Object.values(i).join('') + '0123456789-');
-        const c = E.makeCard(i, 720, S.cardFace || null);
+        const c = E.makeCard(i, 720, S.cardFace || null, S.set.cardTheme);
         $('#cardPrev').src = c.toDataURL('image/png');
         c.width = 0;
       }
@@ -712,13 +714,13 @@
         yPos: st.yPos, anim: st.anim, lineSp: st.lineSp,
       },
       topText: st.topText || '', bottomText: st.bottomText || '',
-      fixedStyle: { top: { font: st.topFont, size: st.topSize, color: st.topColor }, bottom: { font: st.botFont, size: st.botSize, color: st.botColor } },
+      fixedStyle: { top: { font: st.topFont, size: st.topSize, color: st.topColor, y: st.topY }, bottom: { font: st.botFont, size: st.botSize, color: st.botColor, y: st.botY } },
       transition: st.transition, transDur: st.transDur, motion: st.motion, strength: st.strength, fit: st.fit, filter: st.filter,
       particles: st.particles.filter(k => k !== 'custom' || S.stickers.length), density: st.density, stickers: S.stickers,
       frame: st.frame === 'custom' && !S.frameImg ? 'none' : st.frame, frameImg: S.frameImg, vignette: st.vignette,
       overlayVideo: null, ovOpacity: st.ovOp, fadeEdges: st.fadeEdges,
       audio,
-      card: cardOn ? { mode: st.cardMode, info: cardInfo(), face: S.cardFace } : null,
+      card: cardOn ? { mode: st.cardMode, info: cardInfo(), face: S.cardFace, theme: st.cardTheme, y: st.cardY } : null,
     };
   }
   /** 동영상이 섞여 있을 때: 사진은 '1장당 시간', 동영상은 자기 길이(최대 길이까지) */
@@ -895,7 +897,8 @@
     if (k === 'textMode') renderPerList();
     if (k === 'res' || k === 'fps' || k === 'hq') return;
     if (k === 'clipMax') renderPhotos();
-    if (k === 'cardMode') { cardChanged(0); return; }
+    if (k === 'cardMode' || k === 'cardTheme') { cardChanged(0); return; }
+    if (k === 'cardY') { cardChanged(120); return; }
     if (k === 'ovOp' && P.r) { P.r.pj.ovOpacity = S.set.ovOp; if (!P.playing) drawStill(); return; }
     scheduleRebuild(k === 'bulkText' || k === 'topText' || k === 'bottomText' ? 400 : 160);
   }

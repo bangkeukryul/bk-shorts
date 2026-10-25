@@ -295,40 +295,60 @@
     }
     return p;
   }
-  function makeCard(info, W, face) {
+  /** theme: 'blue'(파란 명함 · 기본) | 'ivory'(아이보리 명함) */
+  function makeCard(info, W, face, theme) {
     const fam = `"Noto Sans KR", ${SYS_STACK}`;
+    const blue = theme !== 'ivory';
+    const C = blue
+      ? { bg0: '#2457e6', bg1: '#0d2f9f', line: 'rgba(255,255,255,0.75)', band: '#ffffff', comp: '#1238b8', role: '#c9dafc', name: '#ffffff', phone: '#ffffff', msg: '#dbe6ff', ring: '#1e4fd8' }
+      : { bg0: '#fffdf6', bg1: '#f6eedb', line: '#c9a24a', band: null, comp: '#9a7425', role: '#6e6488', name: '#2a2140', phone: '#3b3355', msg: '#6e6488', ring: '#c9a24a' };
     const hasFace = !!face;
     const D = Math.round(W * 0.27);                       // 얼굴 원 지름
-    const ch = Math.round(D * 0.84);                       // 명함 높이
+    const ch = Math.round(D * 0.93);                       // 명함 높이
     const cw = Math.round(hasFace ? W * 0.86 - D * 0.45 : W * 0.78);
     const totalW = hasFace ? Math.round(D * 0.45 + cw) : cw;
     const pad = Math.round(W * 0.03);
     const c = mkCanvas(totalW + pad * 2, D + pad * 2);
     const x = c.getContext('2d');
     const cardL = pad + (hasFace ? Math.round(D * 0.45) : 0), cardT = pad + Math.round((D - ch) / 2);
+    const R = W * 0.028;
     // 명함 본체
     x.save();
     x.shadowColor = 'rgba(0,0,0,0.35)'; x.shadowBlur = W * 0.02; x.shadowOffsetY = W * 0.006;
-    roundRectPath(x, x, cardL, cardT, cw, ch, W * 0.028);
+    roundRectPath(x, x, cardL, cardT, cw, ch, R);
     const gr = x.createLinearGradient(0, cardT, 0, cardT + ch);
-    gr.addColorStop(0, '#fffdf6'); gr.addColorStop(1, '#f6eedb');
+    gr.addColorStop(0, C.bg0); gr.addColorStop(1, C.bg1);
     x.fillStyle = gr; x.fill();
     x.restore();
-    roundRectPath(x, x, cardL + W * 0.008, cardT + W * 0.008, cw - W * 0.016, ch - W * 0.016, W * 0.022);
-    x.strokeStyle = '#c9a24a'; x.lineWidth = Math.max(1, W * 0.0035); x.stroke();
-    // 글자
     const tx = cardL + (hasFace ? D * 0.62 : W * 0.05), maxW = cardL + cw - tx - W * 0.04;
-    const lines = [];
     const top = [info.company, info.branch].filter(Boolean).join(' ');
-    if (top) lines.push({ t: top, w: 700, px: W * 0.033, col: '#9a7425' });
+    // 회사명 띠 (파란 명함: 흰 띠에 파란 글씨)
+    let bodyT = cardT;
+    if (top && C.band) {
+      const bh = Math.round(ch * 0.25);
+      x.save();
+      roundRectPath(x, x, cardL, cardT, cw, ch, R); x.clip();
+      x.fillStyle = C.band; x.fillRect(cardL, cardT, cw, bh);
+      x.restore();
+      let p = fitFont(x, top, 800, W * 0.034, maxW, fam);
+      x.font = `800 ${Math.round(p)}px ${fam}`; x.fillStyle = C.comp; x.textBaseline = 'middle';
+      x.fillText(top, tx, cardT + bh / 2 + p * 0.04);
+      bodyT = cardT + bh;
+    }
+    roundRectPath(x, x, cardL + W * 0.008, cardT + W * 0.008, cw - W * 0.016, ch - W * 0.016, W * 0.022);
+    x.strokeStyle = C.line; x.lineWidth = Math.max(1, W * 0.0035); x.stroke();
+    // 글자
+    const lines = [];
+    if (top && !C.band) lines.push({ t: top, w: 700, px: W * 0.033, col: C.comp });
     const nm = [info.role, info.name].filter(Boolean);
-    if (nm.length) lines.push({ t: nm.join('  '), w: 800, px: W * 0.056, col: '#2a2140', name: true });
-    if (info.phone) lines.push({ t: info.phone, w: 700, px: W * 0.04, col: '#3b3355' });
-    if (info.msg) lines.push({ t: info.msg, w: 500, px: W * 0.03, col: '#6e6488' });
+    if (nm.length) lines.push({ t: nm.join('  '), w: 800, px: W * 0.056, col: C.name, name: true });
+    if (info.phone) lines.push({ t: info.phone, w: 700, px: W * 0.04, col: C.phone });
+    if (info.msg) lines.push({ t: info.msg, w: 500, px: W * 0.03, col: C.msg });
     lines.forEach(l => { l.px = fitFont(x, l.t, l.w, l.px, maxW, fam); });
-    const gap = W * 0.012;
-    const totH = lines.reduce((a, l) => a + l.px * 1.12, 0) + gap * Math.max(0, lines.length - 1);
-    let y = cardT + (ch - totH) / 2;
+    const gap = W * 0.01;
+    const totH = lines.reduce((acc, l) => acc + l.px * 1.12, 0) + gap * Math.max(0, lines.length - 1);
+    const bodyH = cardT + ch - bodyT;
+    let y = bodyT + (bodyH - totH) / 2;
     x.textBaseline = 'top';
     for (const l of lines) {
       x.font = `${l.w} ${Math.round(l.px)}px ${fam}`;
@@ -338,7 +358,7 @@
         const rp = l.px * 0.62;
         x.font = `700 ${Math.round(rp)}px ${fam}`;
         const rw = x.measureText(info.role + ' ').width;
-        x.fillStyle = '#6e6488';
+        x.fillStyle = C.role;
         x.fillText(info.role, tx, y + (l.px - rp) * 0.8);
         x.font = `${l.w} ${Math.round(l.px)}px ${fam}`;
         x.fillStyle = l.col;
@@ -348,16 +368,16 @@
     }
     // 원형 얼굴
     if (hasFace) {
-      const cx = pad + D / 2, cy = pad + D / 2, R = D / 2;
+      const cx = pad + D / 2, cy = pad + D / 2, Rr = D / 2;
       x.save();
       x.shadowColor = 'rgba(0,0,0,0.4)'; x.shadowBlur = W * 0.02;
-      x.beginPath(); x.arc(cx, cy, R, 0, Math.PI * 2); x.fillStyle = '#c9a24a'; x.fill();
+      x.beginPath(); x.arc(cx, cy, Rr, 0, Math.PI * 2); x.fillStyle = C.ring; x.fill();
       x.restore();
-      x.beginPath(); x.arc(cx, cy, R - W * 0.006, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill();
+      x.beginPath(); x.arc(cx, cy, Rr - W * 0.006, 0, Math.PI * 2); x.fillStyle = '#fff'; x.fill();
       x.save();
-      x.beginPath(); x.arc(cx, cy, R - W * 0.013, 0, Math.PI * 2); x.clip();
+      x.beginPath(); x.arc(cx, cy, Rr - W * 0.013, 0, Math.PI * 2); x.clip();
       const iw = face.naturalWidth || face.width, ih = face.naturalHeight || face.height;
-      const r2 = (R - W * 0.013) * 2, sc = Math.max(r2 / iw, r2 / ih);
+      const r2 = (Rr - W * 0.013) * 2, sc = Math.max(r2 / iw, r2 / ih);
       x.drawImage(face, cx - iw * sc / 2, cy - ih * sc * 0.42, iw * sc, ih * sc);
       x.restore();
     }
@@ -845,7 +865,7 @@
       const fx = (t, f, yy) => {
         const o = Object.assign({}, st, { size: f.size || st.size * 0.6, color: f.color || st.color });
         if (f.font && f.font !== 'same') o.font = f.font;
-        return { t, o, yy };
+        return { t, o, yy: f.y != null ? f.y / 100 : yy };
       };
       const tb = this.pj.fixedStyle || {};
       const list = [];
@@ -859,7 +879,7 @@
       if (cd && cd.mode !== 'none' && (cd.info.name || cd.info.company || cd.info.phone)) {
         const i = cd.info;
         await ensureFont({ family: 'Noto Sans KR', weight: 800, gf: 'Noto+Sans+KR:wght@500;700;800' }, Object.values(i).join('') + '0123456789-');
-        this.card = makeCard(i, this.W, cd.face || null);
+        this.card = makeCard(i, this.W, cd.face || null, cd.theme);
       }
     }
 
@@ -1125,9 +1145,9 @@
       const always = this.pj.card.mode === 'always';
       const sc = always ? 0.8 : 1;
       const w = c.width * sc, h = c.height * sc;
-      // 명함 · 얼굴 사진은 항상 아래쪽 (글귀는 꾸미기 → 세로 위치로 올려서 맞춤)
-      let cy = always ? 0.835 : 0.75;
-      if (this.pj.bottomText.trim()) cy -= 0.07;
+      // 명함 · 얼굴 사진: '명함 세로 위치'(%)로 조절 · 화면 밖으로는 안 나가게
+      let cy = (this.pj.card.y || 86) / 100;
+      cy = clamp(cy, h / 2 / H + 0.01, 1 - h / 2 / H - 0.01);
       const yy = H * cy - h / 2 + (1 - ease(a)) * 30 * this.s;
       x.globalAlpha = a;
       x.drawImage(c, (W - w) / 2, yy, w, h);

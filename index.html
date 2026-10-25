@@ -172,12 +172,14 @@
           <input type="color" data-k="topColor" aria-label="위쪽 문구 색">
         </div>
         <div class="field"><label>글자 크기</label><input type="range" data-k="topSize" min="24" max="110" step="2"><output data-o="topSize"></output></div>
+        <div class="field"><label>높이</label><input type="range" data-k="topY" min="3" max="50" step="1"><output data-o="topY"></output></div>
         <div class="field col"><label for="bottomText">아래쪽에 계속 보이는 문구</label><input type="text" id="bottomText" data-k="bottomText" placeholder="예: 오늘 하루도 행복하세요 ~"></div>
         <div class="fx-row">
           <select data-k="botFont" data-opt="fontsSame" aria-label="아래쪽 문구 글꼴"></select>
           <input type="color" data-k="botColor" aria-label="아래쪽 문구 색">
         </div>
         <div class="field"><label>글자 크기</label><input type="range" data-k="botSize" min="24" max="110" step="2"><output data-o="botSize"></output></div>
+        <div class="field"><label>높이</label><input type="range" data-k="botY" min="50" max="97" step="1"><output data-o="botY"></output></div>
       </div>
       <div class="group">
         <h3>🎬 글귀 등장 효과</h3>
@@ -200,8 +202,10 @@
           <p class="hint" data-show="cardMode=always">영상 처음부터 끝까지 명함이 계속 나와요.</p>
           <p class="hint" data-show="cardMode=ends">영상 <b>처음 4초</b>와 <b>마지막 4초</b>에만 나와요. (중간에는 안 보여요)</p>
           <p class="hint" data-show="cardMode=end">영상 <b>마지막 4초</b>에만 나와요.</p>
-          <p class="hint">명함은 항상 <b>화면 아래쪽</b>에 나와요. 글귀가 가리면 아래 <b>글자 → 세로 위치</b>를 줄여서 글귀를 위로 올려 주세요.</p>
         </div>
+        <div class="field"><label>명함 높이</label><input type="range" data-k="cardY" min="50" max="95" step="1" aria-label="명함 세로 위치"><output data-o="cardY"></output></div>
+        <p class="hint">막대를 오른쪽으로 밀면 명함이 <b>아래로</b>, 왼쪽으로 밀면 <b>위로</b> 가요. 위 미리보기 화면에서 바로 보여요.</p>
+        <div class="field"><span class="lbl">명함 색</span><div class="seg" data-k="cardTheme"><button type="button" data-v="blue">🔵 파랑</button><button type="button" data-v="ivory">🤍 아이보리</button></div></div>
         <div data-show="cardMode=none" class="hint">명함을 넣지 않아요.</div>
         <div class="cardbox" id="cardBox">
           <div class="face-row">
