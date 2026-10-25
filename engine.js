@@ -295,13 +295,16 @@
     }
     return p;
   }
-  /** theme: 'blue'(파란 명함 · 기본) | 'ivory'(아이보리 명함) */
+  /** theme: 'blue'(파란 띠 + 크림 바탕 · 기본) | 'white'(파란 띠 + 흰 바탕 · 검정 글씨) | 'ivory'(아이보리)
+   *  회사명 띠는 모두 파란 바탕 + 흰 글씨, 이름 부분(바탕·글씨·테두리·얼굴 테두리)은 파란·남색 계열을 쓰지 않음 */
+  const CARD_THEMES = {
+    blue: { bg0: '#fffaf0', bg1: '#f8ecd4', line: '#c9a24a', band: '#1e4fd8', comp: '#ffffff', role: '#8a7356', name: '#2a1f14', phone: '#3d3024', msg: '#7a6650', ring: '#c9a24a' },
+    white: { bg0: '#ffffff', bg1: '#f2f2f2', line: '#b5b5b5', band: '#1e4fd8', comp: '#ffffff', role: '#777777', name: '#111111', phone: '#222222', msg: '#666666', ring: '#a8a8a8' },
+    ivory: { bg0: '#fffdf6', bg1: '#f6eedb', line: '#c9a24a', band: '#1e4fd8', comp: '#ffffff', role: '#7d7466', name: '#2b2b2b', phone: '#333333', msg: '#6b6559', ring: '#c9a24a' },
+  };
   function makeCard(info, W, face, theme) {
     const fam = `"Noto Sans KR", ${SYS_STACK}`;
-    const blue = theme !== 'ivory';
-    const C = blue
-      ? { bg0: '#2457e6', bg1: '#0d2f9f', line: 'rgba(255,255,255,0.75)', band: '#ffffff', comp: '#1238b8', role: '#c9dafc', name: '#ffffff', phone: '#ffffff', msg: '#dbe6ff', ring: '#1e4fd8' }
-      : { bg0: '#fffdf6', bg1: '#f6eedb', line: '#c9a24a', band: null, comp: '#9a7425', role: '#6e6488', name: '#2a2140', phone: '#3b3355', msg: '#6e6488', ring: '#c9a24a' };
+    const C = CARD_THEMES[theme] || CARD_THEMES.blue;
     const hasFace = !!face;
     const D = Math.round(W * 0.27);                       // 얼굴 원 지름
     const ch = Math.round(D * 0.93);                       // 명함 높이
@@ -322,7 +325,7 @@
     x.restore();
     const tx = cardL + (hasFace ? D * 0.62 : W * 0.05), maxW = cardL + cw - tx - W * 0.04;
     const top = [info.company, info.branch].filter(Boolean).join(' ');
-    // 회사명 띠 (파란 명함: 흰 띠에 파란 글씨)
+    // 회사명 띠 (파란 바탕에 흰 글씨)
     let bodyT = cardT;
     if (top && C.band) {
       const bh = Math.round(ch * 0.25);

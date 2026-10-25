@@ -955,9 +955,7 @@
     v.src = X.url;
     const a = $('#downloadLink');
     a.href = X.url; a.download = name;
-    let canShare = false;
-    try { canShare = !!(navigator.canShare && navigator.canShare({ files: [X.file] })); } catch (e) { canShare = false; }
-    $('#shareBtn').hidden = !canShare;
+    $('#kakaoGuide').hidden = true;
     const mb = (res.blob.size / 1048576).toFixed(1);
     let info = `${W}x${H} · ${fps}fps · ${total.toFixed(1)}초 · ${mb}MB`;
     if (res.audioCodec === 'opus') info += ' · 오디오 Opus (이 브라우저는 AAC 미지원)';
@@ -968,10 +966,28 @@
   }
   $('#exportBtn').addEventListener('click', doExport);
   $('#cancelBtn').addEventListener('click', () => { if (X.ctl) X.ctl.aborted = true; });
-  $('#shareBtn').addEventListener('click', async () => {
+  // 다운로드 버튼을 누르면 저장 안내
+  $('#downloadLink').addEventListener('click', () => {
+    setTimeout(() => toast('내 파일 → 다운로드 폴더(갤러리 ‘Download’ 앨범)에 저장했어요', 4500), 300);
+  });
+  // 카카오톡으로 보내기: 휴대폰 공유 창 → 카카오톡 선택. 안 되면 저장 후 카톡에서 보내는 방법 안내
+  function saveFile() {
+    const a = document.createElement('a');
+    a.href = X.url; a.download = X.file.name; document.body.appendChild(a); a.click(); a.remove();
+  }
+  $('#kakaoBtn').addEventListener('click', async () => {
     if (!X.file) return;
-    try { await navigator.share({ files: [X.file], title: 'BK쇼츠' }); }
-    catch (e) { if (e && e.name !== 'AbortError') toast('공유하지 못했어요. 다운로드 버튼을 이용해 주세요'); }
+    let ok = false;
+    try { ok = !!(navigator.canShare && navigator.canShare({ files: [X.file] })); } catch (e) { ok = false; }
+    if (ok) {
+      try { await navigator.share({ files: [X.file] }); return; }
+      catch (e) { if (e && e.name === 'AbortError') return; }
+    }
+    // 공유 창이 안 되는 경우(영상이 크거나 휴대폰이 지원 안 함): 저장 + 안내
+    saveFile();
+    $('#kakaoGuide').hidden = false;
+    $('#kakaoGuide').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    toast('영상을 저장했어요 · 아래 방법으로 카카오톡에서 보내 주세요', 5000);
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && S.busy) toast('영상을 만드는 중이에요. 화면을 켠 채로 기다려 주세요', 4000);
