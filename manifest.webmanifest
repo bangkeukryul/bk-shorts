@@ -1,0 +1,17 @@
+{
+  "name": "BK쇼츠",
+  "short_name": "BK쇼츠",
+  "description": "사진·글귀·배경음악으로 틱톡·유튜브 쇼츠용 9:16 감성 영상을 휴대폰에서 바로 만듭니다.",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121026",
+  "theme_color": "#121026",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BK쇼츠</title>
+<meta name="description" content="사진·글귀·배경음악으로 틱톡·유튜브 쇼츠용 9:16 감성 영상을 휴대폰에서 바로 만드는 앱">
+<meta name="theme-color" content="#121026">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BK쇼츠">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6z"/></svg>
+      <h1>BK쇼츠</h1>
+    </div>
+    <div class="top-act"><a class="button ghost small bk-home" href="https://bangkeukryul.github.io/bk-card/">← BK톡톡</a>
+    <button id="installBtn" class="ghost small" hidden>앱 설치</button></div>
+  </header>
+
+  <!-- ── 미리보기 화면 ── -->
+  <section class="stage" aria-label="미리보기">
+    <div class="screen">
+      <canvas id="preview" width="540" height="960"></canvas>
+      <div class="screen-empty" id="screenEmpty">
+        <p>사진을 추가하면<br>여기서 바로 미리 볼 수 있어요</p>
+        <button id="sampleBtn" class="primary small">샘플로 체험하기</button>
+      </div>
+      <div class="screen-busy" id="screenBusy" hidden><span class="spin"></span><span id="busyText">준비 중…</span></div>
+    </div>
+    <div class="transport">
+      <button id="playBtn" class="round" aria-label="재생" disabled>
+        <svg viewBox="0 0 24 24" class="i-play"><path d="M8 5v14l11-7z"/></svg>
+        <svg viewBox="0 0 24 24" class="i-pause" hidden><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+      </button>
+      <input type="range" id="scrub" min="0" max="10" step="0.05" value="0" aria-label="재생 위치" disabled>
+      <span id="timeLbl" class="tnum">0:00 / 0:00</span>
+    </div>
+  </section>
+
+  <main class="panels">
+    <!-- ① 사진 -->
+    <section class="panel" id="p-photo" data-panel="photo">
+      <div class="panel-head"><h2>사진</h2><p>순서대로 영상에 들어가요. 화살표로 순서를 바꿀 수 있어요.</p></div>
+      <label class="drop">
+        <input type="file" id="photoInput" accept="image/*" multiple>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z"/></svg>
+        <span>사진 추가 <small>(여러 장 선택 가능)</small></span>
+      </label>
+      <ol class="photo-grid" id="photoGrid"></ol>
+      <div class="group">
+        <h3>사진 연출</h3>
+        <div class="field"><label for="perDur">사진 1장당 시간</label><input type="range" id="perDur" data-k="perDur" min="2" max="10" step="0.5"><output data-o="perDur"></output></div>
+        <div class="field"><label for="motion">사진 움직임</label><select id="motion" data-k="motion" data-opt="motions"></select></div>
+        <div class="field"><label for="strength">움직임 강도</label><input type="range" id="strength" data-k="strength" min="0.04" max="0.3" step="0.01"><output data-o="strength"></output></div>
+        <div class="field"><label for="transition">장면 전환</label><select id="transition" data-k="transition" data-opt="transitions"></select></div>
+        <div class="field"><label for="transDur">전환 시간</label><input type="range" id="transDur" data-k="transDur" min="0" max="2" step="0.1"><output data-o="transDur"></output></div>
+        <div class="field"><label for="fit">사진 맞춤</label><select id="fit" data-k="fit" data-opt="fits"></select></div>
+        <div class="field"><label for="filter">색감 필터</label><select id="filter" data-k="filter" data-opt="filters"></select></div>
+      </div>
+    </section>
+
+    <!-- ② 음악 -->
+    <section class="panel" id="p-music" data-panel="music" hidden>
+      <div class="panel-head"><h2>배경음악</h2><p>MP3·M4A·WAV. 아이폰은 ‘파일’ 앱에 저장된 음악을 고를 수 있어요.</p></div>
+      <label class="drop">
+        <input type="file" id="musicInput" accept="audio/*,.mp3,.m4a,.wav,.aac,.ogg">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3z"/></svg>
+        <span id="musicDropText">음악 선택</span>
+      </label>
+      <div class="music-card" id="musicCard" hidden>
+        <div class="mc-row"><strong id="musicName"></strong><button class="ghost small" id="musicRemove">빼기</button></div>
+        <dl class="stats"><div><dt>길이</dt><dd id="musicDur" class="tnum"></dd></div><div><dt>템포</dt><dd id="musicBpm" class="tnum"></dd></div></dl>
+      </div>
+      <div class="group">
+        <h3>길이와 박자</h3>
+        <div class="field"><span class="lbl">영상 길이 기준</span>
+          <div class="seg" data-k="lengthMode"><button type="button" data-v="photos">사진 수 × 시간</button><button type="button" data-v="music">음악 길이</button></div>
+        </div>
+        <div class="field toggle"><label for="beatSync">박자에 맞춰 사진 전환</label><input type="checkbox" id="beatSync" data-k="beatSync" role="switch"></div>
+        <div class="field"><label for="bgmStart">음악 시작 위치</label><input type="range" id="bgmStart" data-k="bgmStart" min="0" max="60" step="0.5"><output data-o="bgmStart"></output></div>
+        <div class="field"><label for="maxLen">최대 영상 길이</label><input type="range" id="maxLen" data-k="maxLen" min="0" max="180" step="5"><output data-o="maxLen"></output></div>
+        <div class="field"><label for="volume">음악 볼륨</label><input type="range" id="volume" data-k="volume" min="0.1" max="1.5" step="0.05"><output data-o="volume"></output></div>
+        <div class="field"><label for="fadeOut">끝부분 페이드아웃</label><input type="range" id="fadeOut" data-k="fadeOut" min="0" max="8" step="0.5"><output data-o="fadeOut"></output></div>
+      </div>
+    </section>
+
+    <!-- ③ 글귀 -->
+    <section class="panel" id="p-text" data-panel="text" hidden>
+      <div class="panel-head"><h2>글귀 · 자막</h2></div>
+      <div class="seg wide" data-k="textMode">
+        <button type="button" data-v="bulk">한 번에 쓰기</button><button type="button" data-v="per">사진마다 쓰기</button><button type="button" data-v="file">파일 (TXT·SRT)</button>
+      </div>
+      <div data-show="textMode=bulk">
+        <p class="hint">빈 줄(엔터 두 번)로 나눈 글이 1장, 2장, 3장… 순서대로 들어가요. 글이 사진보다 많으면 사진이 반복돼요.</p>
+        <textarea id="bulkText" data-k="bulkText" rows="12" spellcheck="false"></textarea>
+        <p class="hint tnum" id="blockCount"></p>
+      </div>
+      <div data-show="textMode=per">
+        <ol class="per-list" id="perList"></ol>
+      </div>
+      <div data-show="textMode=file">
+        <label class="drop slim"><input type="file" id="textFile" accept=".txt,.srt,text/plain"><span id="textFileName">TXT 또는 SRT 파일 선택</span></label>
+        <p class="hint">TXT: 빈 줄로 장면 구분 · SRT: 00:00:01,000 --&gt; 00:00:04,000 형식의 시간 지정 자막</p>
+      </div>
+      <div class="group">
+        <h3>고정 문구</h3>
+        <div class="field col"><label for="topText">위쪽에 계속 보이는 문구</label><input type="text" id="topText" data-k="topText" placeholder="예: good time"></div>
+        <div class="field col"><label for="bottomText">아래쪽에 계속 보이는 문구</label><input type="text" id="bottomText" data-k="bottomText" placeholder="예: 오늘 하루도 행복하세요 ~"></div>
+      </div>
+    </section>
+
+    <!-- ④ 꾸미기 -->
+    <section class="panel" id="p-style" data-panel="style" hidden>
+      <div class="panel-head"><h2>꾸미기</h2></div>
+      <div class="group">
+        <h3>글자</h3>
+        <div class="field"><label for="font">글꼴</label><select id="font" data-k="font" data-opt="fonts"></select></div>
+        <div data-show="font=custom"><label class="drop slim"><input type="file" id="fontFile" accept=".ttf,.otf,.woff,.woff2"><span id="fontFileName">글꼴 파일 선택 (.ttf / .otf)</span></label></div>
+        <div class="field"><label for="size">글자 크기</label><input type="range" id="size" data-k="size" min="36" max="130" step="2"><output data-o="size"></output></div>
+        <div class="field"><label for="color">글자색</label><input type="color" id="color" data-k="color"></div>
+        <div class="field"><label for="stroke">테두리색</label><input type="color" id="stroke" data-k="stroke"></div>
+        <div class="field"><label for="strokeW">테두리 두께</label><input type="range" id="strokeW" data-k="strokeW" min="0" max="16" step="1"><output data-o="strokeW"></output></div>
+        <div class="field toggle"><label for="shadow">그림자</label><input type="checkbox" id="shadow" data-k="shadow" role="switch"></div>
+        <div class="field toggle"><label for="box">반투명 배경 박스</label><input type="checkbox" id="box" data-k="box" role="switch"></div>
+        <div data-show="box=true">
+          <div class="field"><label for="boxColor">박스색</label><input type="color" id="boxColor" data-k="boxColor"></div>
+          <div class="field"><label for="boxOp">박스 진하기</label><input type="range" id="boxOp" data-k="boxOp" min="0.1" max="1" step="0.05"><output data-o="boxOp"></output></div>
+        </div>
+        <div class="field"><span class="lbl">정렬</span><div class="seg" data-k="align"><button type="button" data-v="center">가운데</button><button type="button" data-v="left">왼쪽</button></div></div>
+        <div class="field"><label for="yPos">세로 위치</label><input type="range" id="yPos" data-k="yPos" min="10" max="90" step="1"><output data-o="yPos"></output></div>
+        <div class="field"><label for="anim">등장 효과</label><select id="anim" data-k="anim" data-opt="anims"></select></div>
+        <div class="field"><label for="lineSp">줄 간격</label><input type="range" id="lineSp" data-k="lineSp" min="1" max="2.2" step="0.05"><output data-o="lineSp"></output></div>
+      </div>
+      <div class="group">
+        <h3>효과</h3>
+        <div class="field col"><span class="lbl">파티클 (여러 개 선택)</span><div class="chips" id="chips" data-k="particles"></div></div>
+        <div data-show="particles~custom">
+          <label class="drop slim"><input type="file" id="stickerFile" accept="image/png,image/webp,image/*" multiple><span>스티커 이미지 추가 (투명 PNG)</span></label>
+          <div class="sticker-row" id="stickerRow"></div>
+        </div>
+        <div class="field"><label for="density">파티클 양</label><input type="range" id="density" data-k="density" min="0.2" max="3" step="0.1"><output data-o="density"></output></div>
+        <div class="field"><label for="frame">테두리 프레임</label><select id="frame" data-k="frame" data-opt="frames"></select></div>
+        <div data-show="frame=custom"><label class="drop slim"><input type="file" id="frameFile" accept="image/png"><span id="frameFileName">프레임 PNG 선택 (가운데가 투명한 9:16 이미지)</span></label></div>
+        <div class="field"><label for="vignette">가장자리 어둡게</label><input type="range" id="vignette" data-k="vignette" min="0" max="0.8" step="0.05"><output data-o="vignette"></output></div>
+        <div class="field col"><span class="lbl">오버레이 효과 영상 <small>(검은 배경 반짝이·눈 영상 → 검은색은 투명하게)</small></span>
+          <label class="drop slim"><input type="file" id="ovFile" accept="video/*"><span id="ovFileName">효과 영상 선택 (선택 사항)</span></label>
+        </div>
+        <div data-show="hasOv=true">
+          <div class="field"><label for="ovOp">효과 영상 강도</label><input type="range" id="ovOp" data-k="ovOp" min="0.1" max="1" step="0.05"><output data-o="ovOp"></output></div>
+          <button class="ghost small" id="ovRemove" type="button">효과 영상 빼기</button>
+        </div>
+        <div class="field toggle"><label for="fadeEdges">시작·끝 페이드</label><input type="checkbox" id="fadeEdges" data-k="fadeEdges" role="switch"></div>
+      </div>
+    </section>
+
+    <!-- ⑤ 만들기 -->
+    <section class="panel" id="p-export" data-panel="export" hidden>
+      <div class="panel-head"><h2>영상 만들기</h2></div>
+      <div class="warn" id="supportWarn" hidden></div>
+      <dl class="stats big">
+        <div><dt>영상 길이</dt><dd id="sumLen" class="tnum">–</dd></div>
+        <div><dt>장면</dt><dd id="sumScenes" class="tnum">–</dd></div>
+        <div><dt>자막</dt><dd id="sumSubs" class="tnum">–</dd></div>
+      </dl>
+      <div class="group">
+        <div class="field"><span class="lbl">해상도</span><div class="seg" data-k="res"><button type="button" data-v="1080">1080p</button><button type="button" data-v="720">720p (빠름)</button></div></div>
+        <div class="field"><span class="lbl">프레임</span><div class="seg" data-k="fps"><button type="button" data-v="30">30fps</button><button type="button" data-v="24">24fps</button></div></div>
+        <div class="field toggle"><label for="hq">고화질 (파일이 커져요)</label><input type="checkbox" id="hq" data-k="hq" role="switch"></div>
+      </div>
+      <button class="primary block" id="exportBtn" type="button">영상 만들기</button>
+      <div class="progress" id="progress" hidden>
+        <div class="bar"><i id="progBar"></i></div>
+        <div class="prog-row"><span id="progText" class="tnum">준비 중…</span><button class="ghost small" id="cancelBtn" type="button">취소</button></div>
+        <p class="hint">만드는 동안 화면을 켜 두고, 다른 앱으로 넘어가지 마세요.</p>
+      </div>
+      <div class="result" id="result" hidden>
+        <video id="resultVideo" controls playsinline></video>
+        <div class="result-actions">
+          <button class="primary" id="shareBtn" type="button" hidden>갤러리에 저장 · 공유</button>
+          <a class="button ghost" id="downloadLink" download>MP4 다운로드</a>
+        </div>
+        <p class="hint tnum" id="resultInfo"></p>
+      </div>
+      <p class="foot">모든 작업은 이 기기 안에서만 처리돼요. 사진과 음악은 어디에도 업로드되지 않아요.</p>
+    </section>
+  </main>
+
+  <nav class="tabbar" aria-label="단계">
+    <button data-tab="photo" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM6 17l4-5 3 3.5 2-2.5 3 4z"/></svg><span>사진</span></button>
+    <button data-tab="music"><svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3z"/></svg><span>음악</span></button>
+    <button data-tab="text"><svg viewBox="0 0 24 24"><path d="M5 4h14v3h-5.5v13h-3V7H5z"/></svg><span>글귀</span></button>
+    <button data-tab="style"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg><span>꾸미기</span></button>
+    <button data-tab="export"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM10 8v8l6-4z"/></svg><span>만들기</span></button>
+  </nav>
+
+  <div class="ios-hint" id="iosHint" hidden>
+    <p>홈 화면에 추가하면 앱처럼 쓸 수 있어요: 사파리 아래쪽 <b>공유</b> 버튼 → <b>홈 화면에 추가</b></p>
+    <button class="ghost small" id="iosHintClose" type="button">닫기</button>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<script src="mp4mux.js"></script>
+<script src="engine.js"></script>
+<script src="samples.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
