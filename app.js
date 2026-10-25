@@ -580,9 +580,7 @@
     const b = e.target.closest('button'); if (!b) return;
     $('#card_msg').value = b.textContent; S.card.msg = b.textContent; saveCard(); cardChanged(0);
   });
-  $('#faceFile').addEventListener('change', async e => {
-    const f = e.target.files[0]; e.target.value = '';
-    if (!f) return;
+  async function setFace(f) {
     try {
       const { img, release } = await E.loadImage(f);
       const S2 = 420, c = E.mkCanvas(S2, S2), x = c.getContext('2d');
@@ -593,7 +591,38 @@
       S.cardFace = await loadImg(S.cardFaceUrl);
       saveCard(); renderFace(); cardChanged(0);
     } catch (err) { toast('사진을 열 수 없어요'); }
+  }
+  $('#faceFile').addEventListener('change', e => { const f = e.target.files[0]; e.target.value = ''; if (f) setFace(f); });
+  // ── 📥 BK프롬 보관함 사진에서 고르기 (같은 주소라 BK프롬 저장소를 바로 읽음) ──
+  function promImages() {
+    return new Promise((res) => {
+      let r;
+      try { r = indexedDB.open('bk-prom', 1); } catch (e) { res([]); return; }
+      r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains('items')) d.createObjectStore('items', { keyPath: 'id' }); };
+      r.onerror = () => res([]);
+      r.onsuccess = () => {
+        const d = r.result, q = d.transaction('items', 'readonly').objectStore('items').getAll();
+        q.onsuccess = () => { d.close(); res((q.result || []).filter(i => i.type === 'image' && i.blob)); };
+        q.onerror = () => { d.close(); res([]); };
+      };
+    });
+  }
+  let promList = [];
+  $('#facePromBtn').addEventListener('click', async () => {
+    promList = await promImages();
+    promList.sort((a, b) => ((b.cat === '증명사진') - (a.cat === '증명사진')) || (b.updated - a.updated));
+    const g = $('#promGrid');
+    g.innerHTML = promList.length
+      ? promList.map((it, i) => `<button type="button" data-i="${i}"><img src="${it.thumb || ''}" alt=""><span>${String(it.title || '').replace(/</g, '&lt;')}</span></button>`).join('')
+      : '<p class="hint">BK프롬에 저장한 사진이 없어요. BK프롬 → 🖼 이미지 보관함에 증명사진을 먼저 넣어 주세요.</p>';
+    $('#promPick').showModal();
   });
+  $('#promGrid').addEventListener('click', e => {
+    const b = e.target.closest('button[data-i]'); if (!b) return;
+    const it = promList[+b.dataset.i]; $('#promPick').close();
+    if (it) setFace(it.blob).then(() => toast('🪪 BK프롬 사진을 명함 얼굴로 넣었어요'));
+  });
+  $('#promClose').addEventListener('click', () => $('#promPick').close());
   $('#faceRemove').addEventListener('click', () => { S.cardFace = null; S.cardFaceUrl = ''; saveCard(); renderFace(); cardChanged(0); });
 
   function updateBlockCount() {

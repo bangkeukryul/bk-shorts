@@ -26,7 +26,7 @@
       <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6z"/></svg>
       <h1>BK쇼츠</h1>
     </div>
-    <div class="top-act"><a class="button ghost small bk-home" href="https://bangkeukryul.github.io/bk-card/">← BK톡톡</a>
+    <div class="top-act"><a class="button ghost small bk-home" href="https://bangkeukryul.github.io/bk-card/">← BK톡톡</a><a class="button ghost small bk-home adminOnly" style="display:none" href="https://bangkeukryul.github.io/bk-prom/">BK프롬</a>
     <button id="installBtn" class="ghost small" hidden>앱 설치</button></div>
   </header>
 
@@ -213,6 +213,8 @@
             <label class="drop slim"><input type="file" id="faceFile" accept="image/*"><span id="faceText">얼굴 사진 선택 (선택)</span></label>
             <button type="button" class="ghost small" id="faceRemove" data-show="hasFace=true">빼기</button>
           </div>
+          <div class="face-prom adminOnly" style="display:none"><button type="button" class="ghost small" id="facePromBtn">📥 BK프롬 보관함에서 얼굴 사진 고르기 🛠</button>
+          </div>
           <div class="two">
             <div class="lbl-col">회사명
               <div id="compList"></div>
@@ -376,6 +378,12 @@
     <button class="ghost small" id="iosHintClose" type="button">닫기</button>
   </div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <dialog class="prom-pick" id="promPick">
+    <h3>📥 BK프롬 보관함 사진</h3>
+    <p class="hint">명함 얼굴로 쓸 사진을 누르세요. (증명사진이 먼저 보여요)</p>
+    <div class="prom-grid" id="promGrid"></div>
+    <button type="button" class="ghost block-s" id="promClose">닫기</button>
+  </dialog>
 </div>
 
 <script src="mp4mux.js"></script>
