@@ -17,8 +17,10 @@
     fits: [['auto', '자동 (추천)'], ['cover', '화면 꽉 채우기'], ['blur', '사진 전체 + 흐린 배경']],
     filters: [['none', '없음'], ['warm', '따뜻한 감성'], ['vivid', '선명하게'], ['glow', '뽀샤시 글로우'],
       ['vintage', '빈티지'], ['bw', '흑백']],
-    anims: [['lines', '한 줄씩 나타나기'], ['fade', '페이드 인/아웃'], ['typing', '타자기'], ['scroll', '아래→위 스크롤'],
-      ['none', '효과 없음']],
+    anims: [['none', '없음'], ['auto', '✨ 자동 (사진마다 다른 효과)'], ['typing', '⌨️ 타자기 (한 글자씩)'], ['pop', '🫧 한 글자씩 톡톡'],
+      ['chardrop', '⬇️ 한 글자씩 위에서 떨어지기'], ['drop', '🔽 위에서 내려오기'], ['rise', '🔼 아래에서 올라오기'],
+      ['slide_l', '⬅️ 왼쪽에서 들어오기'], ['slide_r', '➡️ 오른쪽에서 들어오기'], ['zoom', '🔍 작게→크게'],
+      ['lines', '한 줄씩 나타나기'], ['fade', '페이드 인/아웃'], ['scroll', '아래→위 스크롤']],
     frames: [['none', '없음'], ['dot_mint', '도트 테두리 · 민트'], ['dot_pink', '도트 테두리 · 핑크'],
       ['dot_lavender', '도트 테두리 · 라벤더'], ['white', '화이트 테두리'], ['cinema', '시네마 바 (위·아래)'],
       ['custom', '내 PNG 프레임']],
@@ -191,7 +193,15 @@
   }
 
   async function makeBase(photo, BW, BH, fit, filter) {
-    const { img, release } = await loadImage(photo.file);
+    let L;
+    try { L = await loadImage(photo.file); }
+    catch (e) {
+      // 휴대폰이 원본 사진 읽기를 막은 경우: 앱에 저장해 둔 작은 사진으로라도 계속 진행
+      if (!photo.thumb) throw e;
+      L = await loadImage(photo.thumb);
+      photo.lowRes = true;
+    }
+    const { img, release } = L;
     try {
       const iw = img.naturalWidth, ih = img.naturalHeight;
       const c = mkCanvas(BW, BH);
@@ -480,7 +490,7 @@
       if (l.trim()) {
         const r = renderLine(l, st, s, font, px);
         const xx = st.align === 'center' ? (W - r.canvas.width) / 2 : W * 0.07 - r.pad;
-        out.push({ text: l, canvas: r.canvas, x: Math.round(xx), y: Math.round(y - r.pad) });
+        out.push({ text: l, canvas: r.canvas, x: Math.round(xx), y: Math.round(y - r.pad), pad: r.pad });
       }
       y += hs[i];
     });
@@ -782,7 +792,7 @@
       let e = sc.end - (k < scenes.length - 1 ? trans / 2 : 0) - 0.1;
       if (k === scenes.length - 1) e = Math.min(e, total - 0.3);
       if (e - s < 0.8) { s = sc.start; e = Math.max(sc.end, sc.start + 0.8); }
-      out.push({ start: s, end: e, text: sc.text });
+      out.push({ start: s, end: e, text: sc.text, anim: sc.anim || null });
     });
     return out;
   }
@@ -790,6 +800,7 @@
   // ═══════════════════════════════════════════════
   // 렌더러
   // ═══════════════════════════════════════════════
+  const AUTO_ANIMS = ['typing', 'drop', 'pop', 'slide_l', 'rise', 'chardrop', 'zoom', 'slide_r', 'lines', 'fade'];
   const MOTION_CYCLE = ['zoom_in', 'pan_right', 'zoom_out', 'pan_up', 'zoom_in', 'pan_left', 'zoom_out', 'pan_down'];
   const TRANS_CYCLE = ['crossfade', 'zoom', 'fade_white', 'push_up', 'crossfade', 'push_left', 'fade_black'];
 
@@ -818,6 +829,7 @@
       this.trans = sc.map(() => (pj.transition === 'random' ? TRANS_CYCLE[Math.floor(r() * TRANS_CYCLE.length)] : pj.transition));
       this.layouts = new Map();
       this.typing = new Map();
+      this.chars = new Map();
       this.fixed = [];
       this.particles = pj.particles.length ? new Particles(pj.particles, pj.density, W, H, this.s, pj.stickers) : null;
       this.frame = makeFrame(pj.frame, W, H, this.s, pj.frameImg);
@@ -827,10 +839,22 @@
 
     async init() {
       const st = this.pj.style;
-      const texts = this.pj.subs.map(x => x.text).concat([this.pj.topText, this.pj.bottomText]).join('');
+      const texts = this.pj.subs.map(x => x.text).join('');
       await ensureFont(fontDef(st.font), texts);
-      if (this.pj.topText.trim()) this.fixed.push(layoutText(this.pj.topText, st, this.W, this.H, this.s, 0.10, 0.62));
-      if (this.pj.bottomText.trim()) this.fixed.push(layoutText(this.pj.bottomText, st, this.W, this.H, this.s, 0.865, 0.58));
+      // 위·아래 고정 문구: 글꼴 · 크기 · 색을 따로 고를 수 있음
+      const fx = (t, f, yy) => {
+        const o = Object.assign({}, st, { size: f.size || st.size * 0.6, color: f.color || st.color });
+        if (f.font && f.font !== 'same') o.font = f.font;
+        return { t, o, yy };
+      };
+      const tb = this.pj.fixedStyle || {};
+      const list = [];
+      if (this.pj.topText.trim()) list.push(fx(this.pj.topText, tb.top || {}, 0.10));
+      if (this.pj.bottomText.trim()) list.push(fx(this.pj.bottomText, tb.bottom || {}, 0.865));
+      for (const it of list) {
+        await ensureFont(fontDef(it.o.font), it.t);
+        this.fixed.push(layoutText(it.t, it.o, this.W, this.H, this.s, it.yy));
+      }
       const cd = this.pj.card;
       if (cd && cd.mode !== 'none' && (cd.info.name || cd.info.company || cd.info.phone)) {
         const i = cd.info;
@@ -843,6 +867,7 @@
       for (const L of this.layouts.values()) L.lines.forEach(l => freeCanvas(l.canvas));
       for (const L of this.fixed) L.lines.forEach(l => freeCanvas(l.canvas));
       for (const c of this.typing.values()) freeCanvas(c);
+      for (const a of this.chars.values()) a.forEach(g => freeCanvas(g.c));
       for (const v of this.vp.values()) v.free();
       freeCanvas(this.frame); freeCanvas(this.vig); freeCanvas(this.card);
     }
@@ -982,19 +1007,73 @@
       return this.layouts.get(i);
     }
 
+    /** 한 글자씩 효과용: 줄 j 의 글자 그림과 위치 (한 번 만들어 재사용) */
+    charsOf(i, j, L) {
+      const key = i + ':' + j;
+      if (this.chars.has(key)) return this.chars.get(key);
+      const l = L.lines[j], st = this.pj.style, s = this.s;
+      measureCtx.font = L.font;
+      const cs = Array.from(l.text), out = [];
+      let pre = '';
+      for (const ch of cs) {
+        const w0 = measureCtx.measureText(pre).width;
+        pre += ch;
+        if (!ch.trim()) continue;
+        const r = renderLine(ch, st, s, L.font, L.px);
+        out.push({ c: r.canvas, x: l.x + l.pad + w0 - r.pad, y: l.y + l.pad - r.pad });
+      }
+      this.chars.set(key, out);
+      return out;
+    }
+
     drawSub(x, i, t) {
       const seg = this.pj.subs[i], st = this.pj.style, L = this.layout(i), s = this.s;
       if (!L.lines.length) return;
+      let anim = seg.anim || st.anim;
+      if (anim === 'auto') anim = AUTO_ANIMS[i % AUTO_ANIMS.length];
       const tau = t - seg.start, D = seg.end - seg.start;
       const fout = clamp((D - tau) / 0.4, 0, 1);
       const put = (c, xx, yy, a) => { if (a > 0.003) { x.globalAlpha = Math.min(1, a); x.drawImage(c, xx, yy); } };
-      if (st.anim === 'lines') {
+      const putS = (c, xx, yy, a, sc) => {
+        if (a <= 0.003 || sc <= 0.01) return;
+        const w = c.width * sc, h = c.height * sc;
+        x.globalAlpha = Math.min(1, a);
+        x.drawImage(c, xx + (c.width - w) / 2, yy + (c.height - h) / 2, w, h);
+      };
+      const nLines = L.lines.length, step = Math.min(0.3, Math.max(0.12, D * 0.3 / nLines));
+      if (anim === 'pop' || anim === 'chardrop') {
+        const all = [];
+        L.lines.forEach((_, j) => all.push(...this.charsOf(i, j, L)));
+        const per = Math.min(0.09, Math.max(0.03, D * 0.5 / Math.max(1, all.length)));
+        all.forEach((g, k) => {
+          const u = clamp((tau - k * per) / (anim === 'pop' ? 0.28 : 0.4), 0, 1);
+          if (u <= 0) return;
+          if (anim === 'pop') {
+            const b = u < 1 ? 1 + 2.2 * (u - 1) ** 3 + 1.2 * (u - 1) ** 2 : 1;      // 톡 튀어나왔다가 제자리
+            putS(g.c, g.x, g.y, Math.min(1, u * 2.5) * fout, Math.max(0.2, b));
+          } else {
+            const e = ease(u);
+            put(g.c, g.x, g.y - (1 - e) * 140 * s, e * fout);
+          }
+        });
+      } else if (anim === 'drop' || anim === 'rise' || anim === 'slide_l' || anim === 'slide_r' || anim === 'zoom') {
+        L.lines.forEach((l, j) => {
+          const a = ease((tau - j * step) / 0.6);
+          if (anim === 'zoom') { putS(l.canvas, l.x, l.y, a * fout, 0.5 + 0.5 * a); return; }
+          let dx = 0, dy = 0;
+          if (anim === 'drop') dy = -(1 - a) * 110 * s;
+          else if (anim === 'rise') dy = (1 - a) * 110 * s;
+          else if (anim === 'slide_l') dx = -(1 - a) * this.W * 0.6;
+          else dx = (1 - a) * this.W * 0.6;
+          put(l.canvas, l.x + dx, l.y + dy, a * fout);
+        });
+      } else if (anim === 'lines') {
         const n = L.lines.length, step = Math.min(0.75, Math.max(0.22, D * 0.5 / n));
         L.lines.forEach((l, j) => { const a = ease((tau - j * step) / 0.5); put(l.canvas, l.x, l.y + (1 - a) * 24 * s, a * fout); });
-      } else if (st.anim === 'fade') {
+      } else if (anim === 'fade') {
         const a = ease(tau / 0.6);
         L.lines.forEach(l => put(l.canvas, l.x, l.y + (1 - a) * 18 * s, a * fout));
-      } else if (st.anim === 'typing') {
+      } else if (anim === 'typing') {
         const chars = L.lines.map(l => Array.from(l.text));
         const total = chars.reduce((a, c) => a + c.length, 0);
         const cps = Math.max(7, total / Math.max(0.5, D * 0.6));
@@ -1013,7 +1092,7 @@
           }
           put(c, l.x, l.y, fout);
         }
-      } else if (st.anim === 'scroll') {
+      } else if (anim === 'scroll') {
         const u = clamp(tau / Math.max(D, 1e-6), 0, 1);
         const startTop = this.H * 0.92, endTop = this.H * 0.08 - L.height;
         const shift = startTop + (endTop - startTop) * u - L.top;
@@ -1410,6 +1489,6 @@
   g.ENG = {
     OPT, PARTICLES, BaseCache, Renderer, planScenes, subsFromScenes, parseSrt, splitBlocks,
     analyzeAudio, analyzeBuffer, decodeClipAudio, renderAudio, exportVideo, supportInfo, fontDef, setCustomFont, ensureFont, loadImage, mkCanvas,
-    seekVideo, makeCard,
+    seekVideo, makeCard, AUTO_ANIMS,
   };
 })(window);

@@ -1,5 +1,5 @@
 /* sw.js — 오프라인 캐시: 앱 파일은 인터넷 우선(업데이트 바로 반영) · 끊기면 저장본, 구글 폰트는 받아 둔 것 재사용 */
-const VERSION = 'bk-shorts-v6';
+const VERSION = 'bk-shorts-v7';
 const FONTS = 'bk-shorts-fonts';
 /* 같은 주소(bangkeukryul.github.io)를 BK톡톡과 함께 쓰므로, 지울 때는 BK쇼츠 것('bk-shorts-'로 시작)만 지운다 */
 const APP = ['./', './index.html', './style.css', './app.js', './engine.js', './mp4mux.js', './samples.js',

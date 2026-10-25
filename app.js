@@ -25,7 +25,8 @@
     lengthMode: 'photos', beatSync: true, bgmStart: 0, maxLen: 0, volume: 1, fadeOut: 3,
     textMode: 'bulk', bulkText: SAMPLE_TEXT, topText: '', bottomText: '',
     font: 'noto', size: 72, color: '#ffffff', stroke: '#000000', strokeW: 7, shadow: true, box: false,
-    boxColor: '#000000', boxOp: 0.45, align: 'center', yPos: 50, anim: 'lines', lineSp: 1.4,
+    boxColor: '#000000', boxOp: 0.45, align: 'center', yPos: 50, anim: 'none', animV: 1, lineSp: 1.4,
+    topFont: 'same', topSize: 46, topColor: '#ffffff', botFont: 'same', botSize: 42, botColor: '#ffffff',
     particles: ['glints', 'hearts'], density: 1, frame: 'none', vignette: 0.25, ovOp: 0.8, fadeEdges: true,
     res: '1080', fps: '30', hq: false,
     clipMax: '10', clipSound: 'clip', capTheme: 'life', cardMode: 'always', cardV: 2,
@@ -37,6 +38,7 @@
       if (s.font === 'custom') s.font = DEF.font; // 업로드 글꼴은 저장되지 않음
       if (s.frame === 'custom') s.frame = 'none';
       if (s.cardV !== 2) { s.cardMode = 'always'; s.cardV = 2; } // 명함 기본값을 '계속'으로 바꿈 (2026-10-25)
+      if (s.animV !== 1) { s.anim = 'none'; s.animV = 1; }      // 글귀 효과 기본값을 '없음'으로 바꿈 (2026-10-25)
       return Object.assign({}, DEF, s);
     } catch (e) { return Object.assign({}, DEF); }
   }
@@ -48,7 +50,7 @@
 
   const S = {
     set: loadSettings(),
-    photos: [], audio: null, perText: {}, srt: null, txtBlocks: null,
+    photos: [], audio: null, perText: {}, animPer: {}, srt: null, txtBlocks: null,
     stickers: [], frameImg: null, ov: null, busy: false,
     card: { company: '', companies: [''], branch: '', role: '', name: '', phone: '', msg: '' }, cardFace: null, cardFaceUrl: '',
   };
@@ -73,7 +75,7 @@
     perDur: v => `${v}초`, strength: v => `${Math.round(v * 100)}%`, transDur: v => (v > 0 ? `${v}초` : '없음'),
     bgmStart: v => fmtTime(v), maxLen: v => (v > 0 ? `${v}초` : '제한 없음'), volume: v => `${Math.round(v * 100)}%`,
     fadeOut: v => (v > 0 ? `${v}초` : '없음'), size: v => `${v}`, strokeW: v => `${v}`, boxOp: v => `${Math.round(v * 100)}%`,
-    yPos: v => `${v}%`, lineSp: v => `×${v}`, density: v => `×${v}`, vignette: v => (v > 0 ? `${Math.round(v * 100)}%` : '없음'),
+    yPos: v => `${v}%`, topSize: v => `${v}`, botSize: v => `${v}`, lineSp: v => `×${v}`, density: v => `×${v}`, vignette: v => (v > 0 ? `${Math.round(v * 100)}%` : '없음'),
     ovOp: v => `${Math.round(v * 100)}%`,
   };
 
@@ -81,7 +83,9 @@
   function fillSelects() {
     $$('select[data-opt]').forEach(sel => {
       const key = sel.dataset.opt;
-      const list = key === 'fonts' ? E.OPT.fonts.map(f => [f.id, f.label]).concat([['custom', '내 글꼴 파일…']]) : E.OPT[key];
+      const list = key === 'fonts' ? E.OPT.fonts.map(f => [f.id, f.label]).concat([['custom', '내 글꼴 파일…']])
+        : key === 'fontsSame' ? [['same', '본문 글귀와 같은 글꼴']].concat(E.OPT.fonts.map(f => [f.id, f.label]))
+          : E.OPT[key];
       sel.innerHTML = list.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
     });
     $('#chips').innerHTML = Object.entries(E.PARTICLES).map(([k, p]) => `<button type="button" data-v="${k}">${p.label}</button>`).join('');
@@ -150,7 +154,7 @@
   function showTab(name) {
     $$('.panel').forEach(p => { p.hidden = p.dataset.panel !== name; });
     $$('.tabbar button').forEach(b => { if (b.dataset.tab === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    if (name === 'text') renderPerList();
+    if (name === 'text') { renderPerList(); renderAnimPer(); }
     if (name === 'export') updateSummary();
     const panels = $('.panels');
     const y = panels.getBoundingClientRect().top + window.scrollY - $('.stage').offsetHeight - 8;
@@ -158,6 +162,21 @@
   }
 
   // ═════════ 사진 ═════════
+  /** 사진을 고르는 순간 앱 안에 사본을 만들어 둠 (휴대폰이 나중에 원본 읽기를 막아도 영상 만들기가 되게) */
+  async function keepPhoto(file) {
+    const { img, release } = await E.loadImage(file);
+    try {
+      const iw = img.naturalWidth, ih = img.naturalHeight, mx = 2400, sc = Math.min(1, mx / Math.max(iw, ih));
+      const c = E.mkCanvas(iw * sc, ih * sc), x = c.getContext('2d');
+      x.imageSmoothingQuality = 'high';
+      x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+      x.drawImage(img, 0, 0, c.width, c.height);
+      const blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.92));
+      c.width = 0; c.height = 0;
+      if (!blob) throw new Error('사진 저장 실패');
+      return blob;
+    } finally { release(); }
+  }
   async function makeThumb(file) {
     const { img, release } = await E.loadImage(file);
     try {
@@ -178,8 +197,9 @@
     for (let i = 0; i < list.length; i++) {
       const f = list[i];
       try {
-        const thumb = await makeThumb(f);
-        S.photos.push({ id: uid++, kind: 'photo', file: f, name: f.name, thumb });
+        const kept = await keepPhoto(f);
+        const thumb = await makeThumb(kept);
+        S.photos.push({ id: uid++, kind: 'photo', file: kept, name: f.name, thumb });
       } catch (e) { bad++; }
       busy(true, `사진 불러오는 중… ${i + 1}/${list.length}`);
     }
@@ -218,7 +238,11 @@
     for (let i = 0; i < list.length; i++) {
       const f = list[i];
       busy(true, `동영상 불러오는 중… ${i + 1}/${list.length}`);
-      const url = URL.createObjectURL(f);
+      let src = f;
+      if (f.size <= 200 * 1048576) {          // 200MB 이하면 앱 안에 사본 (나중에 원본 읽기가 막혀도 되게)
+        try { src = new Blob([await f.arrayBuffer()], { type: f.type || 'video/mp4' }); } catch (e) { src = f; }
+      }
+      const url = URL.createObjectURL(src);
       const el = mkClipVideo(url), xel = mkClipVideo(url);
       try {
         await waitVideo(el);
@@ -233,9 +257,9 @@
         try { x.drawImage(el, (180 - iw * s) / 2, (320 - ih * s) / 2, iw * s, ih * s); } catch (e) { /* 미리보기 그림 없음 */ }
         const thumb = c.toDataURL('image/jpeg', 0.75);
         busy(true, `영상 소리 읽는 중… ${i + 1}/${list.length}`);
-        const abuf = await E.decodeClipAudio(f);
+        const abuf = await E.decodeClipAudio(src);
         if (!abuf) mute++;
-        S.photos.push({ id: uid++, kind: 'video', file: f, name: f.name, thumb, url, el, xel, dur, abuf });
+        S.photos.push({ id: uid++, kind: 'video', file: src, name: f.name, thumb, url, el, xel, dur, abuf });
       } catch (e) {
         bad++; el.remove(); xel.remove(); URL.revokeObjectURL(url);
       }
@@ -272,12 +296,13 @@
           <button type="button" data-act="right" aria-label="뒤로">${ICON.right.replace('<path', '<path stroke="currentColor" stroke-width="2.4" fill="none"')}</button>
         </div></li>`).join('');
     $('#screenEmpty').hidden = S.photos.length > 0;
+    if (!$('#p-text').hidden) renderAnimPer();
     $('#playBtn').disabled = $('#scrub').disabled = !S.photos.length;
   }
   $('#photoGrid').addEventListener('click', e => {
     const b = e.target.closest('button'); if (!b) return;
     const id = +b.closest('li').dataset.id, i = S.photos.findIndex(p => p.id === id);
-    if (b.dataset.act === 'del') { freeItem(S.photos[i]); S.photos.splice(i, 1); delete S.perText[id]; updateShows(); }
+    if (b.dataset.act === 'del') { freeItem(S.photos[i]); S.photos.splice(i, 1); delete S.perText[id]; delete S.animPer[id]; updateShows(); }
     else if (b.dataset.act === 'left' && i > 0) [S.photos[i - 1], S.photos[i]] = [S.photos[i], S.photos[i - 1]];
     else if (b.dataset.act === 'right' && i < S.photos.length - 1) [S.photos[i + 1], S.photos[i]] = [S.photos[i], S.photos[i + 1]];
     renderPhotos();
@@ -372,6 +397,19 @@
     else { S.txtBlocks = E.splitBlocks(txt); S.srt = null; $('#textFileName').textContent = `${f.name} · 장면 ${S.txtBlocks.length}개`; }
     scheduleRebuild(0);
   });
+  // ═════════ 사진마다 글귀 효과 ═════════
+  function renderAnimPer() {
+    const ul = $('#animPerList');
+    if (!S.photos.length) { ul.innerHTML = '<li class="hint">먼저 사진을 추가해 주세요.</li>'; return; }
+    const opts = [['default', '위 기본 효과 따르기']].concat(E.OPT.anims.filter(([v]) => v !== 'auto'));
+    ul.innerHTML = S.photos.map((p, i) => `<li><img src="${p.thumb}" alt=""><span class="tnum">${i + 1}</span><select data-ap="${p.id}">${opts.map(([v, l]) => `<option value="${v}"${(S.animPer[p.id] || 'default') === v ? ' selected' : ''}>${l}</option>`).join('')}</select></li>`).join('');
+  }
+  $('#animPerList').addEventListener('change', e => {
+    const sel = e.target.closest('select[data-ap]'); if (!sel) return;
+    S.animPer[sel.dataset.ap] = sel.value;
+    scheduleRebuild(0);
+  });
+
   // ═════════ 글귀 자동 채우기 (주제별 글귀 · ChatGPT) ═════════
   const CAPS = window.BKCAPS || {};
   function renderCapThemes() {
@@ -645,6 +683,12 @@
     if (blocks.length) scenes.forEach((s, k) => { s.text = blocks[k] || ''; });
     else if (mode === 'per') scenes.forEach(s => { s.text = S.perText[S.photos[s.img].id] || ''; });
     const trans = Math.min(st.transDur, 0.45 * Math.min(...scenes.map(s => s.end - s.start)));
+    scenes.forEach((sc, k) => {
+      const per = S.animPer[S.photos[sc.img].id];
+      let a = per && per !== 'default' ? per : st.anim;
+      if (a === 'auto') a = E.AUTO_ANIMS[k % E.AUTO_ANIMS.length];
+      sc.anim = a;
+    });
     const subs = srt || E.subsFromScenes(scenes, trans, total);
     // 소리: 배경음악 + 영상 속 소리 (영상 소리가 나올 땐 배경음악은 쉼)
     const clips = [], duck = [];
@@ -668,6 +712,7 @@
         yPos: st.yPos, anim: st.anim, lineSp: st.lineSp,
       },
       topText: st.topText || '', bottomText: st.bottomText || '',
+      fixedStyle: { top: { font: st.topFont, size: st.topSize, color: st.topColor }, bottom: { font: st.botFont, size: st.botSize, color: st.botColor } },
       transition: st.transition, transDur: st.transDur, motion: st.motion, strength: st.strength, fit: st.fit, filter: st.filter,
       particles: st.particles.filter(k => k !== 'custom' || S.stickers.length), density: st.density, stickers: S.stickers,
       frame: st.frame === 'custom' && !S.frameImg ? 'none' : st.frame, frameImg: S.frameImg, vignette: st.vignette,

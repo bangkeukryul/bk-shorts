@@ -265,6 +265,16 @@ button:disabled { opacity: 0.45; cursor: default; }
 .card-prev .hint { color: #cfc6e6; }
 .card-prev img { display: block; width: 100%; height: auto; }
 
+/* ── 고정 문구 글꼴 · 사진마다 효과 ── */
+.fx-row { display: grid; grid-template-columns: minmax(0, 1fr) 64px; gap: 8px; padding-bottom: 4px; }
+.fx-row input[type=color] { height: 40px; }
+.anim-per { margin-top: 8px; }
+.anim-per summary { cursor: pointer; font-weight: 700; color: #4c2a9e; padding: 8px 0; }
+.anim-list { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; }
+.anim-list li { display: grid; grid-template-columns: 40px 22px minmax(0, 1fr); gap: 8px; align-items: center; }
+.anim-list img { width: 40px; aspect-ratio: 9 / 16; object-fit: cover; border-radius: 6px; }
+.anim-list span { font-size: 0.8rem; color: var(--muted); text-align: center; }
+
 /* ── 주소 · QR코드 보내기 ── */
 .share { margin-top: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
 .share summary { font-weight: 800; color: var(--gold); cursor: pointer; }

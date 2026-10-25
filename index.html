@@ -167,7 +167,26 @@
       <div class="group">
         <h3>고정 문구</h3>
         <div class="field col"><label for="topText">위쪽에 계속 보이는 문구</label><input type="text" id="topText" data-k="topText" placeholder="예: good time"></div>
+        <div class="fx-row">
+          <select data-k="topFont" data-opt="fontsSame" aria-label="위쪽 문구 글꼴"></select>
+          <input type="color" data-k="topColor" aria-label="위쪽 문구 색">
+        </div>
+        <div class="field"><label>글자 크기</label><input type="range" data-k="topSize" min="24" max="110" step="2"><output data-o="topSize"></output></div>
         <div class="field col"><label for="bottomText">아래쪽에 계속 보이는 문구</label><input type="text" id="bottomText" data-k="bottomText" placeholder="예: 오늘 하루도 행복하세요 ~"></div>
+        <div class="fx-row">
+          <select data-k="botFont" data-opt="fontsSame" aria-label="아래쪽 문구 글꼴"></select>
+          <input type="color" data-k="botColor" aria-label="아래쪽 문구 색">
+        </div>
+        <div class="field"><label>글자 크기</label><input type="range" data-k="botSize" min="24" max="110" step="2"><output data-o="botSize"></output></div>
+      </div>
+      <div class="group">
+        <h3>🎬 글귀 등장 효과</h3>
+        <div class="field"><label>기본 효과</label><select data-k="anim" data-opt="anims" aria-label="기본 글귀 효과"></select></div>
+        <p class="hint">‘✨ 자동’을 고르면 사진마다 타자기 · 위에서 · 아래에서 · 톡톡 … 여러 효과가 돌아가며 나와요.</p>
+        <details class="anim-per">
+          <summary>사진마다 효과 다르게 하기</summary>
+          <ol class="anim-list" id="animPerList"></ol>
+        </details>
       </div>
     </section>
 
