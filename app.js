@@ -82,11 +82,19 @@
   };
 
   // ═════════ 설정 컨트롤 연결 ═════════
+  const isAdm = () => {               // admin.js 보다 먼저 읽힐 수 있어서 주소(?bkadmin)도 같이 봄
+    const q = location.search;
+    if (/[?&]bkadmin=off\b/.test(q)) return false;
+    if (/[?&]bkadmin\b/.test(q)) return true;
+    try { return localStorage.getItem('bkAdmin') === '1'; } catch (e) { return false; }
+  };
+  const NEW_TRANS = E.OPT.transitions.filter(o => o[2]).map(o => o[0]);
   function fillSelects() {
     $$('select[data-opt]').forEach(sel => {
       const key = sel.dataset.opt;
       const list = key === 'fonts' ? E.OPT.fonts.map(f => [f.id, f.label]).concat([['custom', '내 글꼴 파일…']])
         : key === 'fontsSame' ? [['same', '본문 글귀와 같은 글꼴']].concat(E.OPT.fonts.map(f => [f.id, f.label]))
+          : key === 'transitions' ? E.OPT.transitions.filter(o => !o[2] || isAdm()).map(o => [o[0], o[1] + (o[2] ? ' 🛠' : '')])
           : E.OPT[key];
       sel.innerHTML = list.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
     });
@@ -412,10 +420,49 @@
     scheduleRebuild(0);
   });
 
+  // ═════════ 🎨 자막 스타일 한 번에 (샘플 영상 참고) · 위치 위/가운데/아래 ═════════
+  const STYLE_TPLS = [
+    { id: 'basic', label: '감성 쇼츠 기본', sub: '흰 글씨 · 굵은 검은 테두리', set: { font: 'noto', size: 74, color: '#ffffff', stroke: '#000000', strokeW: 9, shadow: true, box: false, yPos: 72, lineSp: 1.35, align: 'center' } },
+    { id: 'yellow', label: '노란 강조', sub: '노란 글씨 · 검은 테두리', set: { font: 'blackhan', size: 78, color: '#ffe14a', stroke: '#000000', strokeW: 10, shadow: true, box: false, yPos: 70, lineSp: 1.3, align: 'center' } },
+    { id: 'green', label: '연두 강조', sub: '연두 글씨 · 검은 테두리', set: { font: 'dohyeon', size: 80, color: '#a8ff4f', stroke: '#000000', strokeW: 9, shadow: true, box: false, yPos: 68, lineSp: 1.3, align: 'center' } },
+    { id: 'morning', label: '좋은 아침 인사', sub: '위에 빨간 붓글씨 제목', top: '좋은 아침', set: { font: 'noto', size: 66, color: '#ffffff', stroke: '#000000', strokeW: 8, shadow: true, box: false, yPos: 66, lineSp: 1.35, align: 'center', topFont: 'nanumbrush', topSize: 104, topColor: '#ff4b5c', topY: 9 } },
+    { id: 'quote', label: '명조 명언', sub: '반투명 박스 · 가운데', set: { font: 'gowunbatang', size: 62, color: '#ffffff', stroke: '#000000', strokeW: 3, shadow: true, box: true, boxColor: '#000000', boxOp: 0.4, yPos: 50, lineSp: 1.55, align: 'center' } },
+    { id: 'pen', label: '손글씨 감성', sub: '펜글씨 · 갈색 테두리', set: { font: 'nanumpen', size: 94, color: '#ffffff', stroke: '#3a2a1a', strokeW: 5, shadow: true, box: false, yPos: 74, lineSp: 1.25, align: 'center' } },
+    { id: 'whitebox', label: '흰 박스 카드', sub: '까만 글씨 · 흰 상자', set: { font: 'nanumgothic', size: 62, color: '#1f2937', stroke: '#ffffff', strokeW: 0, shadow: false, box: true, boxColor: '#ffffff', boxOp: 0.85, yPos: 76, lineSp: 1.45, align: 'center' } },
+    { id: 'love', label: '사랑 분홍', sub: '흰 글씨 · 분홍 테두리', set: { font: 'jua', size: 80, color: '#ffffff', stroke: '#d6194b', strokeW: 9, shadow: true, box: false, yPos: 70, lineSp: 1.3, align: 'center' } },
+  ];
+  function renderStyleTpls() {
+    $('#styleTpls').innerHTML = STYLE_TPLS.map(t => {
+      const st = t.set, sw = Math.min(3, Math.round(st.strokeW / 3));
+      const css = `color:${st.color};${sw ? `-webkit-text-stroke:${sw}px ${st.stroke};paint-order:stroke fill;` : ''}${st.box ? `background:${st.boxColor};` : ''}`;
+      return `<button type="button" data-t="${t.id}" aria-pressed="${S.set.tpl === t.id}"><span class="tpl-sw" style="${css}">${t.top ? '<i>좋은 아침</i>' : ''}가나다</span><b>${t.label}</b><small>${t.sub}</small></button>`;
+    }).join('');
+  }
+  $('#styleTpls').addEventListener('click', e => {
+    const b = e.target.closest('button[data-t]'); if (!b) return;
+    const t = STYLE_TPLS.find(x => x.id === b.dataset.t); if (!t) return;
+    const prevTop = S.set.tplTop || '';
+    Object.assign(S.set, t.set, { tpl: t.id });
+    if (t.top) { if (!S.set.topText || S.set.topText === prevTop) S.set.topText = t.top; S.set.tplTop = t.top; }
+    else if (prevTop && S.set.topText === prevTop) { S.set.topText = ''; S.set.tplTop = ''; Object.assign(S.set, { topFont: 'same', topSize: 46, topColor: '#ffffff', topY: 10 }); }
+    saveSettings(); syncControls(); renderStyleTpls(); markPos(); scheduleRebuild(0);
+    toast(`🎨 ‘${t.label}’ 스타일로 바꿨어요 · 꾸미기 탭에서 더 고칠 수 있어요`);
+  });
+  function markPos() {
+    const y = +S.set.yPos;
+    $$('.posQuick button').forEach(b => b.setAttribute('aria-pressed', String(Math.abs(+b.dataset.y - y) <= 6)));
+  }
+  $$('.posQuick').forEach(el => el.addEventListener('click', e => {
+    const b = e.target.closest('button[data-y]'); if (!b) return;
+    setVal('yPos', +b.dataset.y); syncControls(); markPos();
+  }));
+
   // ═════════ 글귀 자동 채우기 (주제별 글귀 · ChatGPT) ═════════
   const CAPS = window.BKCAPS || {};
   function renderCapThemes() {
-    $('#capThemes').innerHTML = Object.entries(CAPS).map(([k, v]) => `<button type="button" data-v="${k}">${v.label}</button>`).join('');
+    $('#capThemes').innerHTML = Object.entries(CAPS).map(([k, v]) => (v.admin
+      ? `<button type="button" data-v="${k}" class="adminOnly" style="display:${isAdm() ? '' : 'none'}">${v.label} 🛠</button>`
+      : `<button type="button" data-v="${k}">${v.label}</button>`)).join('');
   }
   function markCapTheme() { $$('#capThemes button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === S.set.capTheme))); }
   $('#capThemes').addEventListener('click', e => {
@@ -744,7 +791,7 @@
       },
       topText: st.topText || '', bottomText: st.bottomText || '',
       fixedStyle: { top: { font: st.topFont, size: st.topSize, color: st.topColor, y: st.topY }, bottom: { font: st.botFont, size: st.botSize, color: st.botColor, y: st.botY } },
-      transition: st.transition, transDur: st.transDur, motion: st.motion, strength: st.strength, fit: st.fit, filter: st.filter,
+      transition: NEW_TRANS.includes(st.transition) && !isAdm() ? 'crossfade' : st.transition, newTrans: isAdm(), transDur: st.transDur, motion: st.motion, strength: st.strength, fit: st.fit, filter: st.filter,
       particles: st.particles.filter(k => k !== 'custom' || S.stickers.length), density: st.density, stickers: S.stickers,
       frame: st.frame === 'custom' && !S.frameImg ? 'none' : st.frame, frameImg: S.frameImg, vignette: st.vignette,
       overlayVideo: null, ovOpacity: st.ovOp, fadeEdges: st.fadeEdges,
@@ -803,6 +850,7 @@
     const old = P.r;
     P.r = r; P.pj = pj;
     if (old) old.destroy();
+    if (P.wantTrans) { P.wantTrans = false; if (isAdm()) setTimeout(() => previewTrans(true), 50); }
     $('#scrub').max = pj.total.toFixed(2);
     if (P.t >= pj.total) P.t = 0;
     updateSummary();
@@ -893,6 +941,7 @@
       if (!P.playing) return;
       const t = currentTime();
       if (!P.pj || t >= P.pj.total) { pause(); P.t = 0; drawStill(); return; }
+      if (P.stopAt && t >= P.stopAt) { P.stopAt = 0; pause(); P.t = P.backTo + 0.8; drawStill(); return; }
       P.t = t;
       if (P.r) { P.r.syncPlay(t, true); P.r.draw(P.ctx, t); }
       updateTime();
@@ -902,6 +951,7 @@
   }
   function pause() {
     if (P.playing) P.t = currentTime();
+    if (P.stopAt && !P.playing) P.stopAt = 0;
     P.playing = false;
     cancelAnimationFrame(P.raf);
     stopAudio();
@@ -929,8 +979,24 @@
     if (k === 'cardMode' || k === 'cardTheme') { cardChanged(0); return; }
     if (k === 'cardY') { cardChanged(120); return; }
     if (k === 'ovOp' && P.r) { P.r.pj.ovOpacity = S.set.ovOp; if (!P.playing) drawStill(); return; }
+    if (k === 'yPos') markPos();
+    if (k === 'transition' || k === 'transDur') P.wantTrans = true;
     scheduleRebuild(k === 'bulkText' || k === 'topText' || k === 'bottomText' ? 400 : 160);
   }
+
+  // ═════════ ▶ 전환 미리보기: 사진 1→2 사이 전환만 짧게 보여 줌 ═════════
+  async function previewTrans(auto) {
+    if (!P.r || !P.pj || P.pj.scenes.length < 2) { if (!auto) toast('사진을 2장 이상 넣으면 전환을 볼 수 있어요'); return; }
+    if (P.r.T <= 0) { if (!auto) toast('전환 시간이 ‘없음’이에요 · 막대를 오른쪽으로 밀어 주세요'); return; }
+    const b = P.pj.scenes[1].start, T = P.r.T;
+    pause();
+    P.t = Math.max(0, b - T / 2 - 0.5);
+    P.stopAt = Math.min(P.pj.total, b + T / 2 + 0.7);
+    P.backTo = b;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await play();
+  }
+  $('#transPrev').addEventListener('click', () => previewTrans(false));
 
   // ═════════ 내보내기 ═════════
   const X = { ctl: null, url: null, file: null, wake: null };
@@ -1085,6 +1151,8 @@
   renderBuiltinList();
   renderCapThemes();
   markCapTheme();
+  renderStyleTpls();
+  markPos();
   renderPhotos();
   renderMusic();
   updateBlockCount();

@@ -11,7 +11,10 @@
   const SYS_STACK = '"Apple SD Gothic Neo","Noto Sans KR","Noto Sans CJK KR","Malgun Gothic",sans-serif';
   const OPT = {
     transitions: [['crossfade', '크로스페이드'], ['fade_black', '블랙 페이드'], ['fade_white', '화이트 페이드'],
-      ['zoom', '줌 디졸브'], ['push_up', '위로 밀기'], ['push_left', '왼쪽으로 밀기'], ['random', '랜덤 섞기']],
+      ['zoom', '줌 디졸브'], ['push_up', '위로 밀기'], ['push_left', '왼쪽으로 밀기'],
+      ['diamond', '🔷 마름모 펼치기', 1], ['page', '📖 페이지 넘기기', 1], ['fly', '✈️ 종이비행기 날리기', 1],
+      ['blocks', '🧱 블록 퍼즐', 1], ['diag', '✨ 빛 대각선 쓸기', 1], ['circle', '⭕ 동그라미 펼치기', 1], ['blinds', '🪟 블라인드', 1],
+      ['random', '랜덤 섞기']],
     motions: [['random', '랜덤 (추천)'], ['zoom_in', '줌 인'], ['zoom_out', '줌 아웃'], ['pan_h', '좌우로 흐르기'],
       ['pan_v', '위아래로 흐르기'], ['none', '움직임 없음']],
     fits: [['auto', '자동 (추천)'], ['cover', '화면 꽉 채우기'], ['blur', '사진 전체 + 흐린 배경']],
@@ -826,6 +829,127 @@
   const AUTO_ANIMS = ['typing', 'drop', 'pop', 'slide_l', 'rise', 'chardrop', 'zoom', 'slide_r', 'lines', 'fade'];
   const MOTION_CYCLE = ['zoom_in', 'pan_right', 'zoom_out', 'pan_up', 'zoom_in', 'pan_left', 'zoom_out', 'pan_down'];
   const TRANS_CYCLE = ['crossfade', 'zoom', 'fade_white', 'push_up', 'crossfade', 'push_left', 'fade_black'];
+  const TRANS_CYCLE2 = ['diamond', 'crossfade', 'page', 'blocks', 'zoom', 'diag', 'fly', 'circle', 'push_up', 'blinds'];
+
+  // ── 새 장면 전환 (샘플 영상 참고: 마름모 · 페이지 · 종이비행기 · 블록 · 빛 대각선 · 동그라미 · 블라인드) ──
+  function tmpScene(r, k, t) {          // 장면 하나를 따로 그려 둔 캔버스 (접기 · 넘기기용)
+    if (!r._tmp) { r._tmp = mkCanvas(r.W, r.H); r._tctx = r._tmp.getContext('2d'); }
+    const c = r._tctx; c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
+    c.fillStyle = '#000'; c.fillRect(0, 0, r.W, r.H); r.drawScene(c, k, t);
+    return r._tmp;
+  }
+  const hash2 = (i, j) => { const v = Math.sin(i * 127.1 + j * 311.7) * 43758.5453; return v - Math.floor(v); };
+  const FX_TRANS = {
+    diamond(x, A, B, t, p) {             // 가운데에서 마름모가 커지며 새 사진, 옛 사진은 네 조각으로 갈라져 밖으로
+      const W = this.W, H = this.H, s = this.s, cx = W / 2, cy = H / 2;
+      this.drawScene(x, B, t, 1.08 - 0.08 * p);
+      const g = 0.16 * p;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([sx, sy]) => {
+        x.save(); x.beginPath(); x.rect(sx < 0 ? 0 : cx, sy < 0 ? 0 : cy, cx, cy); x.clip();
+        x.translate(sx * W * g, sy * H * g * 0.6);
+        x.globalAlpha = 1 - p * p; this.drawScene(x, A, t, 1 + 0.1 * p); x.restore();
+      });
+      x.globalAlpha = 1;
+      const rx = (W / 2 + H / 2.6) * 1.03 * p, ry = rx * 1.3;
+      if (rx < 1) return;
+      const path = () => { x.beginPath(); x.moveTo(cx, cy - ry); x.lineTo(cx + rx, cy); x.lineTo(cx, cy + ry); x.lineTo(cx - rx, cy); x.closePath(); };
+      x.save(); path(); x.clip(); this.drawScene(x, B, t, 1.08 - 0.08 * p); x.restore();
+      x.save(); path(); x.strokeStyle = 'rgba(255,255,255,' + (0.9 * (1 - p)).toFixed(3) + ')'; x.lineWidth = 7 * s;
+      x.shadowColor = 'rgba(255,255,255,.8)'; x.shadowBlur = 18 * s; x.stroke(); x.restore();
+    },
+    circle(x, A, B, t, p) {
+      const W = this.W, H = this.H, s = this.s, R = Math.hypot(W, H) / 2 * 1.02 * p;
+      this.drawScene(x, A, t, 1 + 0.08 * p);
+      if (R < 1) return;
+      x.save(); x.beginPath(); x.arc(W / 2, H / 2, R, 0, Math.PI * 2); x.clip(); this.drawScene(x, B, t); x.restore();
+      x.save(); x.beginPath(); x.arc(W / 2, H / 2, R, 0, Math.PI * 2); x.strokeStyle = 'rgba(255,255,255,' + (0.85 * (1 - p)).toFixed(3) + ')';
+      x.lineWidth = 6 * s; x.shadowColor = '#fff'; x.shadowBlur = 16 * s; x.stroke(); x.restore();
+    },
+    blinds(x, A, B, t, p) {              // 가로 띠 10줄이 위에서부터 차례로 열림
+      const W = this.W, H = this.H, n = 10, hs = H / n, lag = 0.05, span = 1 - lag * (n - 1);
+      this.drawScene(x, A, t);
+      x.save(); x.beginPath();
+      for (let i = 0; i < n; i++) {
+        const u = clamp((p - i * lag) / span, 0, 1), h = hs * u;
+        if (h > 0) x.rect(0, i * hs + (hs - h) / 2, W, h + 1);
+      }
+      x.clip(); this.drawScene(x, B, t); x.restore();
+    },
+    blocks(x, A, B, t, p) {              // 가운데부터 네모 블록이 퍼즐처럼 바뀜
+      const W = this.W, H = this.H, cols = 6, rows = 11, cw = W / cols, ch = H / rows;
+      this.drawScene(x, A, t);
+      x.save(); x.beginPath(); let any = false;
+      for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+        const dx = (i + 0.5) / cols - 0.5, dy = ((j + 0.5) / rows - 0.5) * 1.2;
+        const thr = 0.75 * Math.min(1, Math.hypot(dx, dy) / 0.72) + 0.25 * hash2(i, j);
+        const u = clamp((p - thr * 0.7) / 0.3, 0, 1);
+        if (u <= 0) continue;
+        const w = cw * u, h = ch * u; any = true;
+        x.rect(i * cw + (cw - w) / 2, j * ch + (ch - h) / 2, w + 1, h + 1);
+      }
+      if (any) { x.clip(); this.drawScene(x, B, t); }
+      x.restore();
+    },
+    diag(x, A, B, t, p) {                // 빛나는 선이 왼쪽 위에서 오른쪽 아래로 쓸고 지나감
+      const W = this.W, H = this.H, s = this.s, d = 2.06 * p;
+      this.drawScene(x, A, t);
+      if (d <= 0) return;
+      x.save(); x.beginPath(); x.moveTo(0, 0); x.lineTo(d * W, 0); x.lineTo(0, d * H); x.closePath(); x.clip();
+      this.drawScene(x, B, t); x.restore();
+      if (p < 0.98) {
+        x.save(); x.lineCap = 'round';
+        x.beginPath(); x.moveTo(d * W, 0); x.lineTo(0, d * H);
+        x.strokeStyle = 'rgba(255,240,180,.55)'; x.lineWidth = 34 * s; x.shadowColor = 'rgba(255,230,150,.9)'; x.shadowBlur = 40 * s; x.stroke();
+        x.strokeStyle = 'rgba(255,255,255,.95)'; x.lineWidth = 8 * s; x.shadowBlur = 12 * s; x.stroke();
+        x.restore();
+      }
+    },
+    page(x, A, B, t, p) {                // 책장처럼 왼쪽을 축으로 넘어감 (오른쪽 끝이 들리며 커짐)
+      const W = this.W, H = this.H, th = p * Math.PI / 2, cs = Math.cos(th), sn = Math.sin(th), w = W * cs;
+      this.drawScene(x, B, t);
+      const img = tmpScene(this, A, t);
+      // 넘어가는 종이 그림자
+      const sw = W * 0.18 * sn + 1, g = x.createLinearGradient(w, 0, w + sw, 0);
+      g.addColorStop(0, 'rgba(0,0,0,' + (0.45 * sn).toFixed(3) + ')'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      x.fillStyle = g; x.fillRect(w, 0, sw, H);
+      if (w < 1) return;
+      const N = 40;
+      for (let i = 0; i < N; i++) {
+        const u0 = i / N, um = (i + 0.5) / N, f = 1 - 0.32 * sn * um, hh = H * f;
+        const dx = u0 * w, dw = w / N + 1;
+        x.drawImage(img, u0 * W, 0, W / N + 1, H, dx, (H - hh) / 2, dw, hh);
+        const a = 0.42 * sn * um;
+        if (a > 0.01) { x.fillStyle = 'rgba(0,0,0,' + a.toFixed(3) + ')'; x.fillRect(dx, (H - hh) / 2, dw, hh); }
+      }
+      // 종이 끝 하이라이트
+      x.fillStyle = 'rgba(255,255,255,' + (0.35 * sn).toFixed(3) + ')';
+      const fe = 1 - 0.32 * sn; x.fillRect(w - 3 * this.s, (H - H * fe) / 2, 3 * this.s, H * fe);
+    },
+    fly(x, A, B, t, p) {                 // 옛 사진이 세모로 접혀 종이비행기처럼 오른쪽 위로 날아감
+      const W = this.W, H = this.H, s = this.s;
+      this.drawScene(x, B, t, 1.06 - 0.06 * p);
+      const img = tmpScene(this, A, t);
+      const a = clamp(p / 0.4, 0, 1), b = clamp((p - 0.3) / 0.7, 0, 1), ea = ease(a), eb = b * b;
+      const sc = (1 - 0.14 * ea) * (1 - 0.85 * eb), rot = 0.75 * ease(b) - 0.08 * ea;
+      const cx = W / 2 + W * 0.85 * eb, cy = H / 2 - H * 0.75 * Math.pow(b, 1.4) + H * 0.04 * ea * (1 - b);
+      if (sc < 0.02) return;
+      const hw = W / 2, hh = H / 2;
+      const P = [[-hw + hw * ea, -hh], [hw - hw * ea, -hh], [hw, hh], [-hw, hh]];
+      x.save(); x.translate(cx, cy); x.rotate(rot); x.scale(sc, sc);
+      x.shadowColor = 'rgba(0,0,0,.4)'; x.shadowBlur = 40 * s; x.shadowOffsetY = 24 * s;
+      x.beginPath(); P.forEach(([px, py], i) => (i ? x.lineTo(px, py) : x.moveTo(px, py))); x.closePath();
+      x.fillStyle = '#fff'; x.fill();
+      x.shadowColor = 'transparent';
+      x.clip(); x.drawImage(img, -hw, -hh, W, H);
+      if (ea > 0) {                        // 가운데 접힌 선 · 한쪽 날개 그늘
+        x.fillStyle = 'rgba(0,0,0,' + (0.28 * ea).toFixed(3) + ')';
+        x.beginPath(); x.moveTo(0, -hh); x.lineTo(hw, hh); x.lineTo(0, hh); x.closePath(); x.fill();
+        x.strokeStyle = 'rgba(255,255,255,' + (0.6 * ea).toFixed(3) + ')'; x.lineWidth = 4 * s / Math.max(sc, 0.2);
+        x.beginPath(); x.moveTo(0, -hh); x.lineTo(0, hh); x.stroke();
+      }
+      x.restore();
+    },
+  };
 
   class Renderer {
     /** @param pj 프로젝트  @param W,H 출력 크기  @param cache BaseCache */
@@ -849,7 +973,10 @@
         return m;
       });
       const r = rng(11);
-      this.trans = sc.map(() => (pj.transition === 'random' ? TRANS_CYCLE[Math.floor(r() * TRANS_CYCLE.length)] : pj.transition));
+      const cyc = pj.newTrans ? TRANS_CYCLE2 : TRANS_CYCLE;
+      const off = Math.floor(r() * cyc.length);   // 새 전환은 겹치지 않게 차례로 돌아감
+      this.trans = sc.map((_, k) => (pj.transition !== 'random' ? pj.transition
+        : pj.newTrans ? cyc[(k + off) % cyc.length] : cyc[Math.floor(r() * cyc.length)]));
       this.layouts = new Map();
       this.typing = new Map();
       this.chars = new Map();
@@ -887,6 +1014,7 @@
     }
 
     destroy() {
+      if (this._tmp) { freeCanvas(this._tmp); this._tmp = null; }
       for (const L of this.layouts.values()) L.lines.forEach(l => freeCanvas(l.canvas));
       for (const L of this.fixed) L.lines.forEach(l => freeCanvas(l.canvas));
       for (const c of this.typing.values()) freeCanvas(c);
@@ -1017,6 +1145,8 @@
         const off = W * p;
         clipDraw(A, 0, 0, W - off, H, -off, 0);
         clipDraw(Bk, W - off, 0, off, H, W - off, 0);
+      } else if (FX_TRANS[tr]) {
+        FX_TRANS[tr].call(this, x, A, Bk, t, p);
       } else {
         this.drawScene(x, A, t, tr === 'zoom' ? 1 + 0.25 * p : 1);
         x.globalAlpha = p;

@@ -358,3 +358,13 @@ button.kakao { background: #fee500; color: #191919; border: 0; border-radius: 10
   .toast, .ios-hint { bottom: 24px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* 🎨 자막 스타일 한 번에 (2026-10-26) */
+.tpl-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 4px}
+.tpl-grid button{display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 6px;border:2px solid var(--line,#e4dcf5);border-radius:14px;background:#fff;cursor:pointer;font:inherit;color:inherit;min-width:0}
+.tpl-grid button[aria-pressed=true]{border-color:var(--accent,#8b5cf6);background:#f6f1ff}
+.tpl-grid .tpl-sw{display:block;width:100%;padding:8px 4px;border-radius:10px;background:linear-gradient(135deg,#7aa4c8,#5b7f5a);font-weight:900;font-size:1.35rem;line-height:1.15;text-shadow:0 2px 4px rgba(0,0,0,.35)}
+.tpl-grid .tpl-sw[style*="background"]{text-shadow:none}
+.tpl-grid .tpl-sw i{display:block;font-style:normal;font-size:.8rem;color:#ff4b5c;-webkit-text-stroke:0}
+.tpl-grid b{font-size:.9rem}.tpl-grid small{font-size:.72rem;color:#7c7398;text-align:center}
+.posQuick button{flex:1}

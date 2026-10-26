@@ -85,6 +85,10 @@
         <div class="field"><label for="strength">움직임 강도</label><input type="range" id="strength" data-k="strength" min="0.04" max="0.3" step="0.01"><output data-o="strength"></output></div>
         <div class="field"><label for="transition">장면 전환</label><select id="transition" data-k="transition" data-opt="transitions"></select></div>
         <div class="field"><label for="transDur">전환 시간</label><input type="range" id="transDur" data-k="transDur" min="0" max="2" step="0.1"><output data-o="transDur"></output></div>
+        <div class="adminOnly" style="display:none">
+          <div class="btn-row"><button type="button" class="ghost small" id="transPrev">▶ 전환 미리보기 (사진 1→2) 🛠</button></div>
+          <p class="hint">장면 전환을 바꾸면 위 화면에서 바로 한 번 보여 줘요. 🔷 마름모 · 📖 페이지 · ✈️ 종이비행기 · 🧱 블록 · ✨ 빛 대각선 · ⭕ 동그라미 · 🪟 블라인드는 완성 영상(MP4)에도 똑같이 들어가요.</p>
+        </div>
         <div class="field"><label for="fit">사진 맞춤</label><select id="fit" data-k="fit" data-opt="fits"></select></div>
         <div class="field"><label for="filter">색감 필터</label><select id="filter" data-k="filter" data-opt="filters"></select></div>
       </div>
@@ -163,6 +167,12 @@
       <div data-show="textMode=file">
         <label class="drop slim"><input type="file" id="textFile" accept=".txt,.srt,text/plain"><span id="textFileName">TXT 또는 SRT 파일 선택</span></label>
         <p class="hint">TXT: 빈 줄로 장면 구분 · SRT: 00:00:01,000 --&gt; 00:00:04,000 형식의 시간 지정 자막</p>
+      </div>
+      <div class="group adminOnly" style="display:none">
+        <h3>🎨 자막 스타일 한 번에 🛠</h3>
+        <p class="hint">누르면 글꼴 · 색 · 검은 테두리 · 위치가 한 번에 바뀌어요. 바꾼 뒤 ‘꾸미기’ 탭에서 더 고칠 수 있어요.</p>
+        <div class="tpl-grid" id="styleTpls"></div>
+        <div class="field"><span class="lbl">자막 위치</span><div class="seg posQuick"><button type="button" data-y="22">⬆ 위</button><button type="button" data-y="50">가운데</button><button type="button" data-y="78">⬇ 아래</button></div></div>
       </div>
       <div class="group">
         <h3>고정 문구</h3>
@@ -246,6 +256,7 @@
           <div class="field"><label for="boxOp">박스 진하기</label><input type="range" id="boxOp" data-k="boxOp" min="0.1" max="1" step="0.05"><output data-o="boxOp"></output></div>
         </div>
         <div class="field"><span class="lbl">정렬</span><div class="seg" data-k="align"><button type="button" data-v="center">가운데</button><button type="button" data-v="left">왼쪽</button></div></div>
+        <div class="field adminOnly" style="display:none"><span class="lbl">자막 위치 🛠</span><div class="seg posQuick"><button type="button" data-y="22">⬆ 위</button><button type="button" data-y="50">가운데</button><button type="button" data-y="78">⬇ 아래</button></div></div>
         <div class="field"><label for="yPos">세로 위치</label><input type="range" id="yPos" data-k="yPos" min="10" max="90" step="1"><output data-o="yPos"></output></div>
         <div class="field"><label for="anim">등장 효과</label><select id="anim" data-k="anim" data-opt="anims"></select></div>
         <div class="field"><label for="lineSp">줄 간격</label><input type="range" id="lineSp" data-k="lineSp" min="1" max="2.2" step="0.05"><output data-o="lineSp"></output></div>
