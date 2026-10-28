@@ -368,3 +368,28 @@ button.kakao { background: #fee500; color: #191919; border: 0; border-radius: 10
 .tpl-grid .tpl-sw i{display:block;font-style:normal;font-size:.8rem;color:#ff4b5c;-webkit-text-stroke:0}
 .tpl-grid b{font-size:.9rem}.tpl-grid small{font-size:.72rem;color:#7c7398;text-align:center}
 .posQuick button{flex:1}
+
+/* ── 🎙 말하는 쇼츠 ── */
+.tk-pre{font:700 .72rem var(--body);background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 8px;vertical-align:middle}
+a.tk-guide{width:100%;padding:12px;border-radius:12px}
+.tk-topics button{font-size:.88rem}
+textarea.tk-sm{min-height:96px}
+input[type=text]{width:100%}
+.tk-check{list-style:none;margin:8px 0 2px;padding:0;display:grid;gap:4px;font-size:.84rem}
+.tk-check li{padding:6px 10px;border-radius:10px;background:#f0fdf4;color:#166534}
+.tk-check li.warn{background:#fffbeb;color:#92400e}.tk-check li.bad{background:#fef2f2;color:#b91c1c;font-weight:700}
+.tk-yt{margin-top:8px}.tk-yt summary{cursor:pointer;font-weight:700;color:var(--gold);padding:6px 0}
+.tk-v{display:grid;gap:6px;margin-top:8px}
+.tk-prompter{background:#1f1533;color:#fff;border-radius:14px;padding:16px 14px;min-height:120px;display:grid;align-content:center;gap:6px;text-align:center}
+.tk-prompter .hint{color:#d8cff0}
+.tk-pn{font-size:.8rem;color:#c4b5fd}.tk-pt{font-size:1.35rem;font-weight:800;line-height:1.5}.tk-pd{font-size:.82rem;color:#d8cff0}
+.tk-recrow{display:grid;grid-template-columns:auto 1fr auto auto;gap:6px}
+.tk-recrow button{padding:12px 10px}
+button.rec-on{background:#e5484d!important;color:#fff!important;animation:tkpulse 1s infinite}
+@keyframes tkpulse{50%{opacity:.75}}
+.tk-narr{margin-top:10px;border:2px solid #c4b5fd;border-radius:14px;padding:10px 12px;background:#faf7ff}
+.tk-narr audio{width:100%;margin:6px 0}
+.tk-segs{margin:4px 0;padding-left:20px;font-size:.82rem;color:var(--muted)}
+.tk-sub{margin:12px 0 4px;font-weight:800;color:var(--gold)}
+.tk-ref{margin:0 0 6px;padding:12px;border-radius:12px;background:#1f1533;color:#fff;font-weight:800;font-size:1.1rem;line-height:1.6;text-align:center}
+.tk-train{margin:6px 0;padding-left:22px;font-size:.92rem;line-height:1.7}

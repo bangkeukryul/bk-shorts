@@ -95,6 +95,112 @@
       </div>
     </section>
 
+    <!-- 🎙 말하는 쇼츠 (관리자 미리보기) -->
+    <section class="panel" id="p-talk" data-panel="talk" hidden>
+      <div class="panel-head"><h2>🎙 말하는 쇼츠 <small class="tk-pre">🛠 관리자 미리보기</small></h2><p>자료 → AI 대본 → <b>내 목소리</b> → 문장마다 자막·장면이 목소리에 맞춰 넘어가요.</p></div>
+      <a class="button ghost tk-guide" href="voice-guide.html" target="_blank" rel="noopener">📖 설명서 — PC로 ‘내 목소리’ 만들기 · 외출 중 쓰기</a>
+
+      <div class="group">
+        <h3>① 소재 · 분량</h3>
+        <div class="chips tk-topics" id="tkTopics"></div>
+        <div class="field"><span class="lbl">분량</span><div class="seg" id="tkLen"><button type="button" data-v="15">15초</button><button type="button" data-v="30">30초</button><button type="button" data-v="45">45초</button><button type="button" data-v="60">60초</button></div></div>
+        <p class="hint" id="tkLenInfo"></p>
+        <div class="field col"><label for="tkCh">채널 이름 <small>(영상 위 띠)</small></label><input type="text" id="tkCh" placeholder="예: 1분 정치 뉴스"></div>
+        <div class="field col"><label for="tkOpen">첫 인사 <small>(대본 첫 줄 · 비우면 바로 시작)</small></label><input type="text" id="tkOpen"></div>
+        <div class="field col"><label for="tkSrc">출처 <small>(영상 맨 아래)</small></label><input type="text" id="tkSrc" placeholder="예: 정책브리핑 www.korea.kr"></div>
+        <div class="field toggle"><label for="tkEnd">마지막 줄 ‘좋아요와 구독 부탁드려요!’</label><input type="checkbox" id="tkEnd" role="switch"></div>
+        <div class="field col"><label for="tkMemo">자료 메모 <small>(선택 · 기사 글 붙여넣기, 강조할 점)</small></label><textarea id="tkMemo" rows="4" class="tk-sm" placeholder="캡처 사진은 AI 앱에서 📎로 같이 첨부해요."></textarea></div>
+      </div>
+
+      <div class="group">
+        <h3>② AI로 대본 받기</h3>
+        <button type="button" class="primary block-s" id="tkReqBtn">🤖 AI 요청서 만들기</button>
+        <div id="tkReqBox" hidden>
+          <textarea id="tkReq" class="tk-sm" rows="7" readonly></textarea>
+          <div class="admin-2"><button type="button" class="primary small" id="tkReqCopy">📋 요청서 복사</button><a class="button ghost small" href="https://gemini.google.com/app" target="_blank" rel="noopener">✨ Gemini 열기</a></div>
+          <div class="admin-2"><a class="button ghost small" href="https://chatgpt.com/" target="_blank" rel="noopener">💬 ChatGPT 열기</a><a class="button ghost small" href="https://claude.ai/new" target="_blank" rel="noopener">🟠 Claude 열기</a></div>
+          <ol class="howto"><li><b>📋 요청서 복사</b> → AI 앱 열기</li><li>AI 입력칸 <b>📎(＋)</b>로 <b>캡처 사진</b>을 첨부하고 요청서를 붙여넣어 보내요.</li><li>AI 답을 <b>전체 복사</b>해서 아래 칸에 붙여넣고 <b>✨ 정리하기</b>.</li></ol>
+        </div>
+        <div class="field col"><label for="tkAns">AI 답 붙여넣기 <small>(대본만 직접 써도 돼요 · 한 줄 = 한 문장)</small></label><textarea id="tkAns" class="tk-sm" rows="5"></textarea></div>
+        <div class="admin-2"><button type="button" class="ghost small" id="tkPaste">📋 붙여넣기</button><button type="button" class="primary small" id="tkParse">✨ 정리하기</button></div>
+      </div>
+
+      <div class="group" id="tkScript">
+        <h3>③ 대본 확인</h3>
+        <div class="field col"><label for="tkTitle">제목</label><input type="text" id="tkTitle"></div>
+        <div class="field col"><label for="tkDisp">화면 자막 <small>(한 줄 = 한 장면)</small></label><textarea id="tkDisp" rows="8"></textarea><p class="hint" id="tkDispInfo"></p></div>
+        <div class="field col"><label for="tkRead">읽기용 대본 <small>(목소리용 · 숫자는 한글로 · 줄 수 똑같이)</small></label><textarea id="tkRead" rows="8"></textarea></div>
+        <div class="admin-2"><button type="button" class="primary small" id="tkCopyRead">📋 읽기용 대본 복사</button><button type="button" class="ghost small" id="tkSame">↔ 화면 자막과 똑같이</button></div>
+        <ul class="tk-check" id="tkCheck"></ul>
+        <details class="tk-yt"><summary>📺 유튜브 · 릴스에 올릴 글 (제목 · 설명 · 해시태그)</summary>
+          <div class="field col"><label for="tkThumb">썸네일 문구</label><input type="text" id="tkThumb"></div>
+          <div class="field col"><label for="tkDesc">설명</label><textarea id="tkDesc" class="tk-sm" rows="3"></textarea></div>
+          <div class="field col"><label for="tkTags">해시태그</label><input type="text" id="tkTags"></div>
+          <div class="admin-2"><button type="button" class="ghost small" id="tkCopyTitle">📋 제목 복사</button><button type="button" class="ghost small" id="tkCopyDesc">📋 설명+태그+출처</button></div>
+          <div class="admin-2"><button type="button" class="ghost small" id="tkCopyTags">📋 해시태그만</button><span></span></div>
+        </details>
+      </div>
+
+      <div class="group">
+        <h3>④ 목소리 넣기</h3>
+        <div class="seg wide" id="tkVmode"><button type="button" data-v="pc">💻 내 PC 목소리</button><button type="button" data-v="file">🎧 음성 파일</button><button type="button" data-v="rec">🎤 직접 녹음</button></div>
+        <div id="tkV-pc" class="tk-v">
+          <p class="hint">PC의 <b>BK보이스</b>가 학습한 <b>내 목소리</b>로 읽어 줘요. (설치는 📖 설명서)</p>
+          <div class="field col"><label for="tkPc">PC 주소</label><input type="text" id="tkPc" inputmode="url" placeholder="예: 192.168.0.10:9870  또는  https://내PC.tail1234.ts.net"></div>
+          <div class="admin-2"><div class="field col" style="padding:0"><label for="tkPin">PIN 번호</label><input type="text" id="tkPin" inputmode="numeric" placeholder="4자리"></div>
+            <div class="field col" style="padding:0"><label for="tkSpeed">말 빠르기</label><select id="tkSpeed"><option value="0.9">조금 느리게</option><option value="1" selected>보통</option><option value="1.1">조금 빠르게</option><option value="1.2">빠르게</option></select></div></div>
+          <p class="hint" id="tkPcHint"></p>
+          <div class="admin-2"><button type="button" class="primary small" id="tkPcGo">🔊 PC로 내 목소리 만들기</button><button type="button" class="ghost small" id="tkPcTest">🔗 연결 확인</button></div>
+          <p class="hint" id="tkPcMsg"></p>
+        </div>
+        <div id="tkV-file" class="tk-v" hidden>
+          <label class="drop"><input type="file" id="tkFile" accept="audio/*,.wav,.mp3,.m4a"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3z"/></svg><span>음성 파일 불러오기<small>BK보이스 · 타입캐스트 · 일레븐랩스 · 녹음 앱 (WAV · MP3 · M4A)</small></span></label>
+          <p class="hint">BK보이스 파일은 문장 시간이 들어 있어 자막이 딱 맞아요. 다른 파일은 <b>말이 쉬는 곳</b>을 찾아 대본 줄 수만큼 자동으로 나눠요.</p>
+        </div>
+        <div id="tkV-rec" class="tk-v" hidden>
+          <div class="tk-prompter" id="tkPrompt"></div>
+          <div class="tk-recrow"><button type="button" class="ghost" id="tkRecPrev">◀</button><button type="button" class="primary" id="tkRecBtn">⏺ 녹음</button><button type="button" class="ghost" id="tkRecPlay">▶ 듣기</button><button type="button" class="ghost" id="tkRecNext">▶▶</button></div>
+          <p class="hint" id="tkRecInfo"></p>
+          <button type="button" class="primary block-s" id="tkRecJoin" disabled>✅ 녹음 합쳐서 영상에 넣기</button>
+          <p class="hint">한 문장씩 녹음해요. 틀리면 그 문장만 <b>다시 녹음</b>하면 돼요.</p>
+        </div>
+        <div class="tk-narr" id="tkNarr" hidden>
+          <p id="tkNarrInfo"></p>
+          <audio id="tkAudio" controls></audio>
+          <div class="field toggle"><label for="tkNarrOn">영상에 목소리 · 자막 넣기</label><input type="checkbox" id="tkNarrOn" role="switch"></div>
+          <div class="field"><label for="tkGain">목소리 크기</label><input type="range" id="tkGain" min="0.5" max="2" step="0.1"><span></span></div>
+          <div class="field"><label for="tkBgm">배경음악 크기</label><input type="range" id="tkBgm" min="0" max="0.6" step="0.05"><output id="tkBgmOut"></output></div>
+          <details><summary class="hint">문장별 시간 보기</summary><ol class="tk-segs" id="tkNarrSegs"></ol></details>
+          <div class="admin-2"><button type="button" class="ghost small" id="tkNarrSave">💾 목소리 파일 저장</button><button type="button" class="ghost small" id="tkNarrDel">🗑 목소리 빼기</button></div>
+          <p class="hint">목소리가 들어가면 <b>글귀 탭 내용 대신</b> 위 화면 자막이 목소리에 맞춰 나와요.</p>
+        </div>
+      </div>
+
+      <div class="group">
+        <h3>⑤ 화면 · 영상 만들기</h3>
+        <button type="button" class="ghost block-s" id="tkStyle">📺 뉴스 자막 스타일 + 위 채널 띠 · 아래 출처 넣기</button>
+        <div class="admin-2"><button type="button" class="ghost small" id="tkGoPhoto">📷 캡처 · 사진 넣기</button><button type="button" class="ghost small" id="tkBg">🖼 배경 자동 만들기</button></div>
+        <button type="button" class="primary block-s" id="tkGoMake">🎬 영상 만들기로 가기</button>
+        <p class="hint">⚠️ 언론사 기사 화면 · 사진을 그대로 쓰면 저작권 문제가 될 수 있어요. 캡처는 <b>대본 재료</b>로 쓰고, 화면은 내 사진 · 자동 배경 · 공공누리 자료를 권해요. 남의 영상은 다시 올리지 마세요.</p>
+      </div>
+
+      <div class="group">
+        <h3>🧬 내 목소리 등록 <small>(PC 학습용 녹음 · 처음 한 번)</small></h3>
+        <p class="hint">조용한 방에서 휴대폰을 입에서 한 뼘(20~30cm) 떨어뜨리고, 영상에서 쓸 말투 그대로 또박또박 읽어요. <b>본인 목소리만</b> 등록하세요.</p>
+        <p class="tk-sub">❶ 기준 음성 (5~8초)</p>
+        <p class="tk-ref" id="tkRefText"></p>
+        <div class="admin-2"><button type="button" class="primary small" id="tkRefRec">⏺ 기준 음성 녹음</button><button type="button" class="ghost small" id="tkRefCopy">📋 문장 복사</button></div>
+        <p class="hint" id="tkRefMsg">위 문장 한 번만 읽고 ⏹. ‘BK보이스_기준음성.wav’로 저장돼요.</p>
+        <button type="button" class="ghost block-s" id="tkRefSend" hidden>💻 PC(BK보이스)로 바로 보내기</button>
+        <p class="tk-sub">❷ 학습용 녹음 (1~3분)</p>
+        <details><summary class="hint">읽을 문장 보기 (20문장 · 2번 읽으면 더 좋아요)</summary><ol class="tk-train" id="tkTrainList"></ol></details>
+        <button type="button" class="primary block-s" id="tkTrainRec">⏺ 학습용 녹음 시작</button>
+        <p class="hint" id="tkTrainMsg">문장 사이는 1초쯤 쉬어 주세요. 끝나면 ⏹ → ‘BK보이스_학습용_날짜.wav’로 저장돼요.</p>
+        <button type="button" class="ghost block-s" id="tkTrainSend" hidden>💻 PC(BK보이스)로 바로 보내기</button>
+        <p class="hint">PC로 옮기기: 카톡 ‘나와의 채팅’ · 구글 드라이브 · USB, 또는 PC의 BK보이스 화면 ⚙ 설정에서 올리기.</p>
+      </div>
+    </section>
+
     <!-- ② 음악 -->
     <section class="panel" id="p-music" data-panel="music" hidden>
       <div class="panel-head"><h2>배경음악</h2><p>기본 음악을 고르거나, 내 음악 파일(MP3·M4A·WAV)을 넣으세요.</p></div>
@@ -376,7 +482,7 @@
       </div>
     </details>
     <footer class="foot-brand"><button type="button" id="bkFoot" aria-label="BK Agent">BK Agent · 비케이</button></footer>
-<!--BKVER--><style>.bkv{text-align:center;margin:0 0 18px;font-size:.82rem;color:#64748b;line-height:1.6}.bkv>.bkv-n{display:inline-block;padding:3px 12px;border-radius:999px;background:#fff;border:1.5px solid #8b5cf633;color:#8b5cf6;font-weight:800}.bkv-ok{color:#15803d;font-weight:800;margin-left:6px}.bkv-warn{display:block;color:#b45309;font-weight:800;margin-top:4px}#bkVerUp{display:block;width:auto!important;margin:8px auto 0!important;padding:10px 16px!important;border-radius:12px!important;border:0!important;background:#8b5cf6!important;color:#fff!important;font-weight:800!important;font-size:.92rem!important}#bkVerLog{text-align:left;margin:12px auto 0;max-width:640px;background:#fff;border:2px dashed #f59e0b;border-radius:14px;padding:10px 14px;color:#334155}#bkVerLog summary{cursor:pointer;font-weight:800;color:#92400e}.bkv-e{border-top:1px solid #f1f5f9;padding:8px 0 2px;margin-top:8px}.bkv-e b{color:#8b5cf6}.bkv-e span{color:#94a3b8;font-size:.78rem}.bkv-e ul{margin:4px 0 0;padding-left:18px}.bkv-e li{margin:2px 0}.bkv-new b{background:#fef3c7;padding:0 6px;border-radius:6px}</style><div class="bkv" id="bkVer"><span class="bkv-n">BK쇼츠 v17 · 2026.10.28</span><span id="bkVerSt"></span><details id="bkVerLog" hidden></details></div><script>(function(){var V={"v": "17", "prefix": "bk-shorts-", "always": false, "log": [["17", "2026.10.28", ["맨 아래에 버전 표시 + 최신 버전 확인", "관리자용 업데이트 기록 추가"]], ["16", "2026.10.28", ["라이선스 잠금 적용 — 라이선스가 있는 휴대폰에서만 열림"]], ["15 이전", "2026.10.25~27", ["처음 공개(관리자 미리보기) · 사진 + 글귀 + 음악 → 9:16 쇼츠 영상", "전환 효과 · 자막 템플릿 추가"]]]};
+<!--BKVER--><style>.bkv{text-align:center;margin:0 0 18px;font-size:.82rem;color:#64748b;line-height:1.6}.bkv>.bkv-n{display:inline-block;padding:3px 12px;border-radius:999px;background:#fff;border:1.5px solid #8b5cf633;color:#8b5cf6;font-weight:800}.bkv-ok{color:#15803d;font-weight:800;margin-left:6px}.bkv-warn{display:block;color:#b45309;font-weight:800;margin-top:4px}#bkVerUp{display:block;width:auto!important;margin:8px auto 0!important;padding:10px 16px!important;border-radius:12px!important;border:0!important;background:#8b5cf6!important;color:#fff!important;font-weight:800!important;font-size:.92rem!important}#bkVerLog{text-align:left;margin:12px auto 0;max-width:640px;background:#fff;border:2px dashed #f59e0b;border-radius:14px;padding:10px 14px;color:#334155}#bkVerLog summary{cursor:pointer;font-weight:800;color:#92400e}.bkv-e{border-top:1px solid #f1f5f9;padding:8px 0 2px;margin-top:8px}.bkv-e b{color:#8b5cf6}.bkv-e span{color:#94a3b8;font-size:.78rem}.bkv-e ul{margin:4px 0 0;padding-left:18px}.bkv-e li{margin:2px 0}.bkv-new b{background:#fef3c7;padding:0 6px;border-radius:6px}</style><div class="bkv" id="bkVer"><span class="bkv-n">BK쇼츠 v18 · 2026.10.29</span><span id="bkVerSt"></span><details id="bkVerLog" hidden></details></div><script>(function(){var V={"v": "18", "prefix": "bk-shorts-", "always": false, "log": [["18", "2026.10.29", ["🛠 🎙 말하는 쇼츠(말하기 탭) — 소재 7가지 · 분량 15~60초 · AI 요청서 · 답 정리 · 대본 자동 검사", "목소리: 💻 내 PC 목소리(BK보이스) · 🎧 음성 파일(쉬는 곳 자동 나눔) · 🎤 문장별 직접 녹음 → 자막 · 장면이 목소리에 맞춰 넘어감", "🧬 내 목소리 등록(기준 음성 · 학습용 녹음) · 뉴스 자막 스타일 · 주제 배경 자동 만들기", "📖 설명서(voice-guide.html) · BK보이스 PC 프로그램(bkvoice_pc.zip) 추가"]], ["17", "2026.10.28", ["맨 아래에 버전 표시 + 최신 버전 확인", "관리자용 업데이트 기록 추가"]], ["16", "2026.10.28", ["라이선스 잠금 적용 — 라이선스가 있는 휴대폰에서만 열림"]], ["15 이전", "2026.10.25~27", ["처음 공개(관리자 미리보기) · 사진 + 글귀 + 음악 → 9:16 쇼츠 영상", "전환 효과 · 자막 템플릿 추가"]]]};
 function $(i){return document.getElementById(i)}
 var adm=function(){try{return V.always||localStorage.getItem('bkAdmin')==='1'}catch(e){return !!V.always}};
 var box=$('bkVer'),st=$('bkVerSt'),lg=$('bkVerLog');
@@ -398,10 +504,14 @@ fetch('sw.js?v='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.t
 })();</script><!--/BKVER-->
 
 
+
+
+
   </main>
 
   <nav class="tabbar" aria-label="단계">
     <button data-tab="photo" aria-current="page"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4zM6 17l4-5 3 3.5 2-2.5 3 4z"/></svg><span>사진</span></button>
+    <button data-tab="talk" class="adminOnly" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 003-3V5a3 3 0 10-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-3.08A7 7 0 0019 11z"/></svg><span>말하기</span></button>
     <button data-tab="music"><svg viewBox="0 0 24 24"><path d="M12 3v10.55A4 4 0 1014 17V7h4V3z"/></svg><span>음악</span></button>
     <button data-tab="text"><svg viewBox="0 0 24 24"><path d="M5 4h14v3h-5.5v13h-3V7H5z"/></svg><span>글귀</span></button>
     <button data-tab="style"><svg viewBox="0 0 24 24"><path d="M12 2l1.6 6.4L20 10l-6.4 1.6L12 18l-1.6-6.4L4 10l6.4-1.6zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg><span>꾸미기</span></button>
@@ -427,6 +537,7 @@ fetch('sw.js?v='+Date.now(),{cache:'no-store'}).then(function(r){return r.ok?r.t
 <script src="music.js"></script>
 <script src="captions.js"></script>
 <script src="app.js"></script>
+<script src="talk.js"></script>
 <script src="share.js"></script>
 <script src="admin.js"></script>
 </body>

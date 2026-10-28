@@ -30,7 +30,7 @@
     topY: 10, botY: 95, cardY: 83, cardTheme: 'blue', posV: 1,
     particles: ['glints', 'hearts'], density: 1, frame: 'none', vignette: 0.25, ovOp: 0.8, fadeEdges: true,
     res: '1080', fps: '30', hq: false,
-    clipMax: '10', clipSound: 'clip', capTheme: 'life', cardMode: 'always', cardV: 2,
+    clipMax: '10', clipSound: 'clip', capTheme: 'life', cardMode: 'always', cardV: 2, talkBgm: 0.15,
   };
   const STORE_KEY = 'gamseong-shorts.v1';
   function loadSettings() {
@@ -52,7 +52,7 @@
 
   const S = {
     set: loadSettings(),
-    photos: [], audio: null, perText: {}, animPer: {}, srt: null, txtBlocks: null,
+    photos: [], audio: null, narr: null, perText: {}, animPer: {}, srt: null, txtBlocks: null,
     stickers: [], frameImg: null, ov: null, busy: false,
     card: { company: '', companies: [''], branch: '', role: '', name: '', phone: '', msg: '' }, cardFace: null, cardFaceUrl: '',
   };
@@ -743,9 +743,34 @@
   });
 
   // ═════════ 프로젝트 구성 ═════════
+  /** 🎙 말하는 쇼츠: 목소리(내레이션) 문장 시간에 맞춰 장면 · 자막 · 소리를 짬 */
+  function talkPlan(N) {
+    const st = S.set, lead = 0.35, tail = 1.2;
+    const segs = N.segs.filter(g => g.e > g.s);
+    const total = lead + N.duration + tail;
+    const n = Math.max(1, segs.length);
+    const bounds = [0];
+    for (let k = 1; k < n; k++) bounds.push(lead + (segs[k - 1].e + segs[k].s) / 2);
+    bounds.push(total);
+    const scenes = [];
+    for (let k = 0; k < n; k++) scenes.push({ img: k % S.photos.length, start: bounds[k], end: bounds[k + 1], text: '', clipStart: 0 });
+    const subs = segs.filter(g => (g.t || '').trim()).map(g => ({ start: lead + g.s, end: Math.min(total - 0.2, lead + g.e + 0.12), text: g.t, anim: st.anim === 'auto' ? null : (st.anim || null) }));
+    const vol = st.volume * (st.talkBgm == null ? 0.15 : st.talkBgm);
+    const audio = {
+      buffer: S.audio && vol > 0 ? S.audio.buffer : null, start: st.bgmStart, volume: vol, fadeIn: 0.5, fadeOut: Math.min(st.fadeOut, 2),
+      clips: [{ buffer: N.buffer, at: lead, offset: 0, dur: N.duration }], duck: [], clipVolume: N.gain || 1,
+    };
+    return { scenes, total, subs, audio };
+  }
   function buildProject() {
     if (!S.photos.length) return null;
     const st = S.set;
+    const N = S.narr && S.narr.on && S.narr.buffer ? S.narr : null;
+    if (N) {
+      const tp = talkPlan(N);
+      tp.scenes.forEach((sc, k) => { const per = S.animPer[S.photos[sc.img].id]; sc.anim = per && per !== 'default' ? per : null; });
+      return finishProject(tp.scenes, tp.total, tp.subs, tp.audio);
+    }
     const mode = st.textMode;
     const blocks = mode === 'bulk' ? E.splitBlocks(st.bulkText || '') : (mode === 'file' && S.txtBlocks ? S.txtBlocks : []);
     const srt = mode === 'file' && S.srt && S.srt.length ? S.srt : null;
@@ -781,6 +806,10 @@
       buffer: S.audio ? S.audio.buffer : null, start: st.bgmStart, volume: st.volume, fadeIn: 0.5, fadeOut: st.fadeOut,
       clips, duck, clipVolume: 1,
     } : null;
+    return finishProject(scenes, total, subs, audio);
+  }
+  function finishProject(scenes, total, subs, audio) {
+    const st = S.set;
     const cardOn = st.cardMode !== 'none' && (S.card.name || S.card.company || S.card.phone);
     return {
       photos: S.photos.slice(), scenes, total, subs,
@@ -889,7 +918,7 @@
     if (!pj.audio) return 'none';
     const a = pj.audio;
     const cl = a.clips.map(c => `${c.at.toFixed(2)}:${c.dur.toFixed(2)}:${S.photos.find(p => p.abuf === c.buffer)?.id}`).join(',');
-    return [S.audio ? S.audio.name + S.audio.duration : '-', a.start, a.volume, a.fadeOut, pj.total.toFixed(2), cl].join('|');
+    return [S.audio ? S.audio.name + S.audio.duration : '-', a.start, a.volume, a.fadeOut, pj.total.toFixed(2), cl, S.narr && S.narr.on ? S.narr.id + ':' + (S.narr.gain || 1) : ''].join('|');
   }
   async function ensureAllBases(r) {
     const n = r.pj.scenes.length;
@@ -1159,5 +1188,6 @@
   checkSupport();
   loadCard().then(() => cardChanged(0));
   $$('.tabbar button').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
-  window.__app = { S, P, buildProject, addPhotos, addVideos, setMusic, setBuiltin, doExport, fillCaptions }; // 테스트용
+  window.__app = { S, P, buildProject, addPhotos, addVideos, setMusic, setBuiltin, doExport, fillCaptions, // 테스트용 · talk.js 연결
+    scheduleRebuild, showTab, toast, busy, syncControls, setVal, renderPhotos };
 })();
