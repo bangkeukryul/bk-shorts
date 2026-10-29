@@ -6,7 +6,7 @@
 if(window.BKLIC)return;
 var PUB='BB_6icy4bOLsFVvaagojoVa4TBbDQG9xCxyQF944iKgGQkv5hFFf0Sbq5Zan11P1A0-p_75WDsGb3lyzFwBUX5U';                       /* 확인용 공개 키 (비어 있으면 라이선스 기능 꺼짐) */
 var ON=PUB.length>40;
-var PROGS=[['card','감성 인사 카드'],['event','이벤트 카드'],['profile','가게·개인 홍보'],['faith','말씀·법문 카드'],['emoji','나만의 이모티콘'],['motion','움직이는 카드'],['moim','모임공지 카드'],['music','BK뮤직'],['analysis','보장분석 도우미'],['shorts','BK쇼츠'],['fc','보험설계사 프로필'],['studio','BK스튜디오']];
+var PROGS=[['card','감성 인사 카드'],['event','이벤트 카드'],['profile','가게·개인 홍보'],['faith','말씀·법문 카드'],['emoji','나만의 이모티콘'],['motion','움직이는 카드'],['moim','모임공지 카드'],['music','BK뮤직'],['analysis','보장분석 도우미'],['shorts','BK쇼츠'],['fc','보험설계사 프로필'],['studio','BK영상']];
 var DEFAULT_LOCK=['music','shorts','fc','studio'];
 /* 설정 파일을 만들 때 있던 프로그램 목록(progs)에 없는 새 프로그램은 기본 잠금(DEFAULT_LOCK)을 따름 */
 var OLD_PROGS=['card','event','profile','faith','emoji','motion','moim','music','analysis','shorts','fc'];
