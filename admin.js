@@ -10,7 +10,7 @@
   const REPO = 'https://github.com/bangkeukryul/bk-shorts';
   const UPLOAD = REPO + '/upload/main';
   const APP = 'https://bangkeukryul.github.io/bk-shorts/';
-  const FILES = ['index.html', 'style.css', 'app.js', 'engine.js', 'music.js', 'captions.js', 'samples.js', 'mp4mux.js', 'admin.js', 'share.js', 'license.js', 'talk.js', 'voice-guide.html', 'bkvoice_pc.zip',
+  const FILES = ['index.html', 'style.css', 'app.js', 'engine.js', 'music.js', 'captions.js', 'samples.js', 'mp4mux.js', 'admin.js', 'share.js', 'license.js',
     'sw.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png', 'README.md'];
 
   // ── 켜기 / 끄기 ──
