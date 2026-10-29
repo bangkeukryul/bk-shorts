@@ -6,6 +6,13 @@
 if(window.BKLIC)return;
 var PUB='BB_6icy4bOLsFVvaagojoVa4TBbDQG9xCxyQF944iKgGQkv5hFFf0Sbq5Zan11P1A0-p_75WDsGb3lyzFwBUX5U';                       /* 확인용 공개 키 (비어 있으면 라이선스 기능 꺼짐) */
 var ON=PUB.length>40;
+/* 카톡 · 밴드 같은 앱 안의 브라우저는 크롬과 저장 공간이 따로라 기기 코드가 달라요 → 크롬으로 넘김 */
+var UA=navigator.userAgent||'',INAPP=/KAKAOTALK|NAVER\(inapp|Instagram|FBAN|FBAV|Line\//i.test(UA);
+function outUrl(key){var q=location.search.replace(/[?&]k=BKL1\.[A-Za-z0-9_-]+/,'').replace(/^&/,'?');return location.origin+location.pathname+q+(key?(q?'&':'?')+'k='+key:'')}
+function openChrome(key){var u=outUrl(key);
+ if(/Android/i.test(UA)){location.href='intent://'+u.replace(/^https?:\/\//,'')+'#Intent;scheme=https;package=com.android.chrome;end';return true}
+ if(/KAKAOTALK/i.test(UA)){location.href='kakaotalk://web/openExternal?url='+encodeURIComponent(u);return true}
+ return false}
 var PROGS=[['card','감성 인사 카드'],['event','이벤트 카드'],['profile','가게·개인 홍보'],['faith','말씀·법문 카드'],['emoji','나만의 이모티콘'],['motion','움직이는 카드'],['moim','모임공지 카드'],['music','BK뮤직'],['analysis','보장분석 도우미'],['shorts','BK쇼츠'],['fc','보험설계사 프로필'],['studio','BK영상']];
 var DEFAULT_LOCK=['music','shorts','fc','studio'];
 /* 설정 파일을 만들 때 있던 프로그램 목록(progs)에 없는 새 프로그램은 기본 잠금(DEFAULT_LOCK)을 따름 */
@@ -76,10 +83,10 @@ function addKey(text){var key=pickKey(text);if(!key)return Promise.resolve({ok:f
   return r})})}
 var REASON={none:'아직 라이선스가 없어요.',bad:'라이선스 글자가 올바르지 않아요. 받은 링크를 그대로 붙여넣어 주세요.',device:'다른 휴대폰용 라이선스예요. 이 휴대폰의 기기 코드로 다시 받아 주세요.',revoked:'사용이 중지된 라이선스예요.',prog:'이 프로그램이 들어 있지 않은 라이선스예요.',expired:'라이선스 기간이 끝났어요.',clock:'휴대폰 날짜 · 시간이 맞지 않아요. 자동 날짜로 맞춘 뒤 다시 열어 주세요.',format:'라이선스를 찾지 못했어요. 받은 링크나 BKL1.로 시작하는 글을 붙여넣어 주세요.'};
 window.BKLIC={on:ON,pub:PUB,PROGS:PROGS,DEFAULT_LOCK:DEFAULT_LOCK,ACT_URL:ACT_URL,deviceCode:deviceCode,fmtDev:fmtDev,devBytes:devBytes,check:check,addKey:addKey,parse:parse,pickKey:pickKey,keys:keys,saveKeys:saveKeys,
- maskNames:maskNames,dayStr:dayStr,dayNow:dayNow,progBit:progBit,REASON:REASON,b64u:b64u,unb64u:unb64u,EPOCH:EPOCH,loadCfg:loadCfg,isLocked:isLocked};
+ maskNames:maskNames,dayStr:dayStr,dayNow:dayNow,progBit:progBit,REASON:REASON,b64u:b64u,unb64u:unb64u,EPOCH:EPOCH,loadCfg:loadCfg,isLocked:isLocked,INAPP:INAPP,openChrome:openChrome,outUrl:outUrl};
 
 /* ═════════ 잠금 화면 (window.BK_PROG 가 있는 화면에서만) ═════════ */
-var prog=window.BK_PROG;
+var prog=window.BK_PROG,pendKey='';
 if(!ON||!prog)return;
 var pname=(PROGS.filter(function(p){return p[0]===prog})[0]||[0,'이 프로그램'])[1];
 var css='html.bk-lock body>*:not(#bkLicGate){display:none!important}html.bk-lock body{overflow:hidden}'+
@@ -112,16 +119,23 @@ function gate(r){var old=document.getElementById('bkLicGate');if(old)old.remove(
  '<div class="card"><b>① 이 휴대폰의 기기 코드</b><div class="dev">'+code+'</div><button type="button" class="kk" data-a="send">💬 카톡으로 라이선스 요청하기</button><button type="button" class="b2" data-a="copy">📋 기기 코드 복사</button></div>'+
  '<div class="card"><b>② 받은 라이선스 넣기</b><br><small>카톡으로 받은 <b>링크를 누르면</b> 바로 열려요. 또는 받은 글을 길게 눌러 복사한 뒤 아래에 붙여넣으세요.</small><textarea id="bkLicIn" placeholder="https://… 또는 BKL1.…"></textarea><button type="button" class="b2" data-a="paste">📋 붙여넣기</button><button type="button" class="b1" data-a="ok">✅ 라이선스 확인</button><div class="msg" id="bkLicMsg"></div></div>'+
  '<p style="text-align:center;margin-top:14px"><a href="/bk-card/" style="color:#174782;font-weight:800">← BK톡톡 처음 메뉴</a></p></div>';
+ if(INAPP){g.innerHTML='<div class="w"><div class="lk">🔒</div><h1>'+pname+'은(는) 크롬에서 열어 주세요</h1>'+
+  '<div class="why">⚠️ 지금 <b>카톡(앱) 안의 브라우저</b>로 열려 있어요.</div>'+
+  '<div class="card"><small>여기는 크롬과 저장 공간이 따로라서 <b>기기 코드가 다르게</b> 나오고, 라이선스도 들어가지 않아요.<br>아래 버튼을 누르면 크롬에서 열려요'+(pendKey?' · <b>받은 라이선스도 함께 넘어가요</b>':'')+'.</small>'+
+  '<button type="button" class="b1" data-a="chrome">🌐 크롬으로 열기</button><div class="msg" id="bkLicMsg"></div></div></div>'}
  document.body.appendChild(g);
  var msg=function(t,c){var m=document.getElementById('bkLicMsg');m.textContent=t;m.style.color=c||'#b91c1c'};
  var txt='[BK 라이선스 요청]\n프로그램: '+pname+'\n기기 코드: '+code+'\n이름: \n전화: ';
  g.addEventListener('click',function(e){var b=e.target.closest('button[data-a]');if(!b)return;var a=b.getAttribute('data-a');
+  if(a==='chrome'){if(!openChrome(pendKey))msg('오른쪽 위 메뉴에서 ‘다른 브라우저로 열기’를 눌러 주세요');return}
   if(a==='copy'){(navigator.clipboard?navigator.clipboard.writeText(code):Promise.reject()).then(function(){msg('✅ 기기 코드를 복사했어요','#059669')}).catch(function(){msg('기기 코드를 길게 눌러 복사해 주세요')});}
   if(a==='send'){if(navigator.share)navigator.share({text:txt}).catch(function(){});else (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(function(){msg('✅ 요청 글을 복사했어요 · 카톡에 붙여넣어 보내 주세요','#059669')}).catch(function(){});}
   if(a==='paste'){(navigator.clipboard&&navigator.clipboard.readText?navigator.clipboard.readText():Promise.reject()).then(function(t){document.getElementById('bkLicIn').value=t;b.nextElementSibling.click()}).catch(function(){msg('칸을 길게 눌러 붙여넣기 해 주세요');document.getElementById('bkLicIn').focus()});}
   if(a==='ok'){msg('확인 중…','#174782');addKey(document.getElementById('bkLicIn').value).then(function(x){if(!x.ok){msg('❌ '+REASON[x.reason]);return}msg('✅ 확인됐어요! 여는 중…','#059669');setTimeout(run,400)})}
  })}
-/* 받은 링크로 바로 열었을 때 (#BKL1.…) */
-var hk=pickKey(location.hash);if(hk){addKey(hk).then(function(){try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}run()})}
-else if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run();
+/* 받은 링크로 바로 열었을 때 (#BKL1.… 또는 ?k=BKL1.…) — 앱 안 브라우저면 크롬으로 넘겨서 거기서 넣음 */
+var hk=pickKey(location.hash)||pickKey(location.search),start=function(){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run);else run()};
+if(hk&&INAPP){pendKey=hk;openChrome(hk);start()}
+else if(hk){addKey(hk).then(function(){try{history.replaceState(null,'',outUrl(''))}catch(e){}run()})}
+else start();
 })();
