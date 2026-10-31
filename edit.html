@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f6f3fc">
+<title>BK쇼츠 영상 편집</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="edit.css">
+</head>
+<body>
+<script>window.BK_PROG="shorts";</script><script src="license.js"></script>
+<div class="app">
+  <header class="top">
+    <div class="brand"><h1>🎬 영상 편집</h1><em class="adm">🛠 관리자 미리보기</em></div>
+    <div class="top-act"><a class="bk-home" href="./">← BK쇼츠</a></div>
+  </header>
+
+  <!-- ── 시작 화면 ── -->
+  <section id="start">
+    <div class="resume" id="resume" hidden>
+      <div><b>📂 이어서 하기</b><span id="resumeInfo"></span></div>
+      <div class="two"><button type="button" id="resumeBtn" class="pri">▶ 이어서 하기</button><button type="button" id="resumeDel" class="sec">지우기</button></div>
+    </div>
+    <h2>① 무슨 영상을 만들까요?</h2>
+    <div class="pgrid" id="pGrid"></div>
+    <h2>② 화면 모양</h2>
+    <div class="chips" id="rChips"></div>
+    <h2>③ 사진 · 동영상 고르기</h2>
+    <label class="bigpick"><input type="file" id="fStart" accept="image/*,video/*" multiple hidden><span>📷 사진 · 🎞 동영상 고르기</span><small>여러 개를 한꺼번에 골라요 · 나중에 더 넣을 수 있어요</small></label>
+    <ul class="howto">
+      <li>✂️ <b>자르기 · 나누기 · 순서 · 속도</b> — 필요한 부분만 남겨요</li>
+      <li>💬 <b>자막 13가지</b> (예능 · 말풍선 · 뉴스 띠 · 손글씨 · 추억 명조 …) · 😀 스티커 · 가격표 · 할인 배지</li>
+      <li>✨ 효과 (줌인 · 흔들림 · 하트 · 꽃가루 · 옛날 필름) · 🔔 효과음 12가지 · 🎵 음악 · 🎤 내 목소리</li>
+      <li>🤖 <b>AI가 장면을 보고</b> 어디를 몇 초 쓸지 · 자막 · 멘트를 정해 줘요</li>
+      <li>🏪 가게 정보 → 엔딩에 주소 · 전화 · QR · 📝 블로그용 대표 이미지 · 자막 파일 · 글 요청서</li>
+      <li>💾 세로 · 가로 · 정사각 MP4로 한 번에 만들기 — 사진 · 영상은 휴대폰 밖으로 나가지 않아요</li>
+    </ul>
+  </section>
+
+  <!-- ── 편집 화면 ── -->
+  <section id="editor" hidden>
+    <div class="stage">
+      <div class="screen" id="screen"><canvas id="cv" width="540" height="960"></canvas><div class="busy" id="busy" hidden><span class="spin"></span><span id="busyT"></span></div></div>
+      <div class="transport">
+        <button type="button" id="playBtn" class="round" aria-label="재생">▶</button>
+        <input type="range" id="scrub" min="0" max="10" step="0.01" value="0" aria-label="재생 위치">
+        <span id="tLbl" class="tnum">0:00 / 0:00</span>
+      </div>
+      <div class="qbar"><button type="button" id="undoBtn" title="되돌리기">↩️ 되돌리기</button><button type="button" id="redoBtn" title="다시 하기">↪️</button><span id="ratioLbl"></span></div>
+    </div>
+    <div class="tlw"><div class="tl" id="tl"></div></div>
+    <main class="panel" id="panel"></main>
+    <nav class="tabs" id="tabs" aria-label="편집 도구"></nav>
+  </section>
+
+  <p class="foot">BK쇼츠 영상 편집 v1 · <span id="edVer"></span><br>BK Agent · 비케이</p>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script src="mp4mux.js"></script>
+<script src="engine.js"></script>
+<script src="music.js"></script>
+<script src="qr.js"></script>
+<script src="ed-core.js"></script>
+<script src="ed-render.js"></script>
+<script src="ed-ui.js"></script>
+<script>document.getElementById('edVer').textContent='2026.11.01';</script>
+</body>
+</html>
