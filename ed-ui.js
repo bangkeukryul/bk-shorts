@@ -16,6 +16,7 @@ const pressed = (a, b) => ` aria-pressed="${a === b}"`;
 /* ═════════ 되돌리기 · 저장 ═════════ */
 let hist = [], hi = -1, saveT = 0;
 function commit(noHist) {
+  fixPins();
   if (!noHist) { const s = JSON.stringify(P); if (s !== hist[hi]) { hist = hist.slice(0, hi + 1); hist.push(s); if (hist.length > 50) hist.shift(); hi = hist.length - 1; } }
   updUndo(); renderTL(); drawNow(); clearTimeout(saveT); saveT = setTimeout(saveProj, 700); premix();
 }
@@ -126,7 +127,7 @@ function renderTL() {
   $('tl').innerHTML = P.clips.map((c, i) => {
     const len = clipLen(c), w = Math.round(clamp(len * 22, 58, 230)), b = [];
     if ((c.cap || {}).t) b.push('💬'); if (c.kind === 'video' && (c.mute || c.vol === 0)) b.push('🔇'); if (c.speed !== 1) b.push(c.speed + '×'); if ((c.efx || []).length) b.push('✨'); if ((c.sfx || []).length) b.push('🔔'); if (c.vo) b.push('🎤'); if ((c.stk || []).length) b.push('😀');
-    const lbl = c.kind === 'card' ? (c.card === 'title' ? '🎬 오프닝' : '🏁 엔딩') : (c.kind === 'video' ? '🎞' : '🖼');
+    const lbl = c.kind === 'card' ? (c.card === 'title' ? '🎬 오프닝' : '🏁 엔딩') : (c.pin === 'first' ? '📌 ' : c.pin === 'last' ? '🏁 ' : '') + (c.kind === 'video' ? '🎞' : '🖼');
     return `<button type="button" class="tli ${c.kind} ${i === SEL ? 'sel' : ''}" data-i="${i}" style="width:${w}px"><span class="th" data-th="${i}"></span><span class="tn">${i + 1}</span><span class="tk">${lbl}</span><span class="td">${len.toFixed(1)}초</span>${b.length ? `<span class="tb">${b.join('')}</span>` : ''}</button>`;
   }).join('') + `<label class="tli addi"><input type="file" id="fAdd2" accept="image/*,video/*" multiple hidden><span>＋<small>자료 더</small></span></label>`;
   $('tl').querySelectorAll('[data-th]').forEach(el => {
@@ -134,17 +135,69 @@ function renderTL() {
     const th = ED.thumbs.get(c.src + '@' + (c.kind === 'video' ? Math.round(c.in) : 0)) || ED.thumbs.get(c.src); if (!th) return;
     const cv = document.createElement('canvas'); cv.width = 90; cv.height = 90; const x = cv.getContext('2d'); const r = ED.coverRect(th.width, th.height, 90, 90, .5, .5); x.drawImage(th, r[0], r[1], r[2], r[3]); el.appendChild(cv);
   });
-  $('fAdd2').onchange = async e => { const fs = Array.from(e.target.files || []); e.target.value = ''; if (!fs.length) return; const n = await addFiles(fs); commit(); toast(`＋ ${n}개를 넣었어요`); };
+  $('fAdd2').onchange = async e => { const fs = Array.from(e.target.files || []); e.target.value = ''; if (!fs.length) return; const pos = insPos(), n = await addFiles(fs, pos); commit(); if (n && pos != null) select(pos, true); toast(pos == null ? `＋ ${n}개를 맨 뒤에 넣었어요` : `＋ ${n}개를 장면 ${pos + 1} 자리(커서 앞)에 넣었어요`, 3500); };
   $('tLbl').textContent = `${fmtS(T)} / ${fmtS(total)}`; $('scrub').max = Math.max(.1, total).toFixed(2); $('scrub').value = T.toFixed(2);
   playhead();
 }
 function playhead() {
-  const A = clipAt(P, T), items = $('tl').querySelectorAll('.tli[data-i]'); let ph = $('ph'); if (!ph) { ph = document.createElement('i'); ph.id = 'ph'; }
+  const A = clipAt(P, T), items = $('tl').querySelectorAll('.tli[data-i]'); let ph = $('ph'); if (!ph) { ph = document.createElement('i'); ph.id = 'ph'; ph.innerHTML = '<b></b>'; phBind(ph); }
   const it = items[A.i]; if (!it) { ph.remove(); return; }
   if (ph.parentNode !== $('tl')) $('tl').appendChild(ph);
   ph.style.left = (it.offsetLeft + it.offsetWidth * clamp(A.lt / clipLen(A.c), 0, 1)) + 'px';
 }
-$('tl').addEventListener('click', e => { const b = e.target.closest('.tli[data-i]'); if (!b) return; const i = +b.dataset.i; select(i, true); });
+$('tl').addEventListener('click', e => { if (TLNOCLICK) { TLNOCLICK = false; return; } const b = e.target.closest('.tli[data-i]'); if (!b) return; const i = +b.dataset.i; select(i, true); });
+/* ── 🔴 빨간 커서 손잡이: 아래 동그라미를 잡고 좌우로 끌기 (화면 끝에 닿으면 저절로 넘어감) ── */
+let TLNOCLICK = false, phD = null, phRaf = 0;
+function tlTimeAt(cx) {
+  const tl = $('tl'), r = tl.getBoundingClientRect(), x = cx - r.left + tl.scrollLeft, { st } = timeline(P); let last = -1;
+  for (const it of tl.querySelectorAll('.tli[data-i]')) { const i = +it.dataset.i, l = it.offsetLeft, w = it.offsetWidth; if (x < l) return last < 0 ? 0 : st[i]; if (x <= l + w) return st[i] + clipLen(P.clips[i]) * clamp((x - l) / w, 0, .999); last = i; }
+  return last < 0 ? 0 : st[last] + clipLen(P.clips[last]) - .02;
+}
+function phApply() {
+  const tl = $('tl'), { total } = timeline(P); T = clamp(tlTimeAt(phD.x), 0, Math.max(0, total - .01));
+  $('tLbl').textContent = `${fmtS(T)} / ${fmtS(total)}`; $('scrub').value = T.toFixed(2); playhead();
+  const A = clipAt(P, T); if (A.i !== SEL) { SEL = A.i; tl.querySelectorAll('.tli.sel').forEach(x => x.classList.remove('sel')); const it = tl.querySelector(`.tli[data-i="${A.i}"]`); if (it) it.classList.add('sel'); }
+  if (!phRaf) phRaf = requestAnimationFrame(() => { phRaf = 0; drawNow(); });
+}
+function phBind(ph) {
+  ph.addEventListener('pointerdown', e => {
+    e.preventDefault(); e.stopPropagation(); if (PLAY) pause(); try { ph.setPointerCapture(e.pointerId); } catch (er) { /* 무시 */ }
+    phD = { x: e.clientX, iv: setInterval(() => { if (!phD) return; const tl = $('tl'), r = tl.getBoundingClientRect(); if (phD.x < r.left + 40) { tl.scrollLeft -= 14; phApply(); } else if (phD.x > r.right - 40) { tl.scrollLeft += 14; phApply(); } }, 40) };
+    ph.classList.add('drag');
+  });
+  ph.addEventListener('pointermove', e => { if (!phD) return; e.preventDefault(); phD.x = e.clientX; phApply(); });
+  const end = () => { if (!phD) return; clearInterval(phD.iv); phD = null; ph.classList.remove('drag'); TLNOCLICK = true; setTimeout(() => { TLNOCLICK = false; }, 350); renderTL(); renderPanel(); drawNow(); };
+  ph.addEventListener('pointerup', end); ph.addEventListener('pointercancel', end);
+}
+/* ── ✋ 사진 꾹 눌러 끌어서 순서 바꾸기 (살짝 밀면 넘기기 · 0.45초 꾹 누르면 들어 올리기) ── */
+let LP = null;
+$('tl').addEventListener('contextmenu', e => { if (e.target.closest('.tli')) e.preventDefault(); });
+$('tl').addEventListener('pointerdown', e => {
+  if (e.target.closest('#ph')) return; const b = e.target.closest('.tli[data-i]'); if (!b || PLAY) return;
+  const i = +b.dataset.i, c = P.clips[i]; if (!c || c.kind === 'card' || c.pin) return;
+  LP = { i, b, x: e.clientX, y: e.clientY, on: false, t: setTimeout(lpStart, 450) };
+});
+function lpStart() {
+  if (!LP) return; LP.on = true; try { navigator.vibrate && navigator.vibrate(25); } catch (e) { /* 무시 */ }
+  const r = LP.b.getBoundingClientRect(), gh = LP.b.cloneNode(true); gh.classList.add('tlghost'); gh.style.width = r.width + 'px'; gh.style.left = (LP.x - r.width / 2) + 'px'; gh.style.top = (r.top - 14) + 'px';
+  const cs = LP.b.querySelectorAll('canvas'), cg = gh.querySelectorAll('canvas'); cs.forEach((cv, k) => { if (cg[k]) cg[k].getContext('2d').drawImage(cv, 0, 0); });
+  document.body.appendChild(gh); LP.gh = gh; LP.b.style.opacity = '.3';
+  const di = document.createElement('i'); di.id = 'dropi'; $('tl').appendChild(di); LP.di = di; lpMove(LP.x);
+  LP.iv = setInterval(() => { if (!LP || !LP.on) return; const tl = $('tl'), rr = tl.getBoundingClientRect(); if (LP.x < rr.left + 40) { tl.scrollLeft -= 14; lpMove(LP.x); } else if (LP.x > rr.right - 40) { tl.scrollLeft += 14; lpMove(LP.x); } }, 40);
+}
+function lpIndex(cx) { const tl = $('tl'), r = tl.getBoundingClientRect(), x = cx - r.left + tl.scrollLeft, items = Array.from(tl.querySelectorAll('.tli[data-i]')); for (const it of items) if (x < it.offsetLeft + it.offsetWidth / 2) return { j: +it.dataset.i, left: it.offsetLeft - 3 }; const l = items[items.length - 1]; return { j: P.clips.length, left: l ? l.offsetLeft + l.offsetWidth + 2 : 0 }; }
+function lpMove(cx) { if (!LP || !LP.on) return; LP.x = cx; LP.gh.style.left = (cx - LP.gh.offsetWidth / 2) + 'px'; const d = lpIndex(cx); LP.j = d.j; LP.di.style.left = d.left + 'px'; }
+document.addEventListener('pointermove', e => { if (!LP) return; if (!LP.on) { if (Math.hypot(e.clientX - LP.x, e.clientY - LP.y) > 10) { clearTimeout(LP.t); LP = null; } return; } e.preventDefault(); lpMove(e.clientX); }, { passive: false });
+$('tl').addEventListener('touchmove', e => { if (LP && LP.on) e.preventDefault(); }, { passive: false });
+function lpEnd(drop) {
+  if (!LP) return; clearTimeout(LP.t); const L = LP; LP = null; if (!L.on) return;
+  clearInterval(L.iv); L.gh.remove(); L.di.remove(); L.b.style.opacity = ''; TLNOCLICK = true; setTimeout(() => { TLNOCLICK = false; }, 350);
+  if (!drop || L.j == null) return renderTL();
+  const c = P.clips[L.i]; let j = L.j > L.i ? L.j - 1 : L.j; if (j === L.i) return renderTL();
+  P.clips.splice(L.i, 1); const [lo, hi] = movRange(); j = clamp(j, lo, hi + 1); P.clips.splice(j, 0, c); SEL = j;
+  commit(); renderPanel(); toast(`✋ ${j + 1}번째 자리로 옮겼어요`);
+}
+document.addEventListener('pointerup', () => lpEnd(true)); document.addEventListener('pointercancel', () => lpEnd(false));
 function select(i, seek) {
   if (PLAY) pause(); SEL = i; SELOV = null; FOCUS = false;
   if (seek && i >= 0) { const { st } = timeline(P); T = st[i] + .02; }
@@ -252,7 +305,7 @@ $('cv').addEventListener('pointermove', e => {
 $('cv').addEventListener('pointerup', () => { if (drag) { if (drag.moved) commit(); drag = null; } });
 
 /* ═════════ 도구 탭 ═════════ */
-const TABS = [['edit', '✂️', '편집'], ['cap', '💬', '자막'], ['stk', '😀', '스티커'], ['fx', '✨', '효과'], ['snd', '🎵', '소리'], ['ai', '🤖', 'AI'], ['info', '🏷', '정보'], ['save', '💾', '저장']];
+const TABS = [['edit', '✂️', '편집'], ['order', '🧩', '순서'], ['cap', '💬', '자막'], ['stk', '😀', '스티커'], ['fx', '✨', '효과'], ['snd', '🎵', '소리'], ['ai', '🤖', 'AI'], ['info', '🏷', '정보'], ['save', '💾', '저장']];
 function renderTabs() { $('tabs').innerHTML = TABS.map(([k, i, n]) => `<button type="button" data-tab="${k}"${pressed(TAB, k)}><span>${i}</span>${n}</button>`).join(''); }
 $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (!b) return; TAB = b.dataset.tab; renderTabs(); renderPanel(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
 const cur = () => (SEL >= 0 && SEL < P.clips.length ? P.clips[SEL] : null);
@@ -266,8 +319,8 @@ const range = (key, val, min, max, step, lbl) => `<label class="rg"><span>${lbl}
 
 function renderPanel() {
   if (!P) return;
-  const c = cur(), f = { edit: pEdit, cap: pCap, stk: pStk, fx: pFx, snd: pSnd, ai: pAI, info: pInfo, save: pSave }[TAB];
-  $('panel').innerHTML = f(c);
+  const c = cur(), f = { edit: pEdit, order: pOrder, cap: pCap, stk: pStk, fx: pFx, snd: pSnd, ai: pAI, info: pInfo, save: pSave }[TAB];
+  $('panel').innerHTML = f(c); fillThumbs($('panel'));
   const ta = $('panel').querySelector('textarea[data-auto]'); if (ta) autoGrow(ta);
 }
 function autoGrow(t) { t.style.height = 'auto'; t.style.height = Math.min(320, t.scrollHeight + 4) + 'px'; }
@@ -276,7 +329,10 @@ function autoGrow(t) { t.style.height = 'auto'; t.style.height = Math.min(320, t
 function pEdit(c) {
   let h = head(c);
   if (c) {
-    h += `<div class="btns4"><button type="button" data-a="mv" data-v="-1">◀ 앞으로</button><button type="button" data-a="mv" data-v="1">뒤로 ▶</button><button type="button" data-a="dup">📄 복제</button><button type="button" data-a="del" class="dg">🗑 지우기</button></div>`;
+    h += c.kind === 'card' ? `<div class="btns4"><button type="button" data-a="mv" data-v="-1">◀ 앞으로</button><button type="button" data-a="mv" data-v="1">뒤로 ▶</button><button type="button" data-a="dup">📄 복제</button><button type="button" data-a="del" class="dg">🗑 지우기</button></div>`
+      : `<div class="btns4"><button type="button" data-a="mvfirst">⏮ 맨 앞</button><button type="button" data-a="mv" data-v="-1">◀ 앞으로</button><button type="button" data-a="mv" data-v="1">뒤로 ▶</button><button type="button" data-a="mvlast">맨 뒤 ⏭</button></div>
+      <div class="btns4" style="grid-template-columns:2fr 1fr 1fr;margin-top:0"><button type="button" data-a="mvto">🔢 몇 번째로</button><button type="button" data-a="dup">📄 복제</button><button type="button" data-a="del" class="dg">🗑 지우기</button></div>
+      <div class="btns2" style="margin-bottom:6px">${c.pin ? `<button type="button" data-a="pin" data-v="" style="grid-column:1/-1">${c.pin === 'first' ? '📌 첫 화면' : '🏁 엔딩 화면'}으로 고정됨 · 눌러서 고정 풀기</button>` : `<button type="button" data-a="pin" data-v="first">📌 첫 화면으로 고정</button><button type="button" data-a="pin" data-v="last">🏁 엔딩 화면으로 고정</button>`}</div>`;
     if (c.kind === 'video') {
       const s = SRC.get(c.src), d = s ? s.dur : c.out;
       h += `<div class="grp"><h3>✂️ 자르기 <small>필요한 부분만 남겨요</small></h3>
@@ -295,7 +351,7 @@ function pEdit(c) {
     if (c.kind !== 'card') h += `<div class="grp"><h3>🖼 화면에 맞추기</h3>${chips('fit', { auto: '자동 (흐린 배경)', cover: '꽉 채우기', contain: '전체 보이기 (검은 배경)' }, c.fit)}<button type="button" data-a="focus" class="sec">📍 ${FOCUS ? '화면을 눌러 주세요…' : '보일 중심 맞추기 (얼굴이 잘릴 때)'}</button></div>`;
     h += `<div class="grp"><h3>🔀 넘어가는 효과 <small>이 장면이 시작될 때</small></h3>${chips('trans', Object.assign({ auto: '추천' }, TRANS), c.trans)}<button type="button" data-a="alltrans" class="sec">모든 장면에 같게</button></div>`;
   }
-  h += `<div class="grp"><h3>🗂 전체</h3><div class="btns2"><label class="btnf">＋ 사진 · 동영상 더<input type="file" data-a="addf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 내 파일에서 더<input type="file" data-a="addf" multiple hidden></label></div><p class="hint" style="margin:6px 0 0">📁 「작업 선택」이 나오면 <b>파일</b>을 고르고 → 첫 사진을 <b>꾹(길게) 누르면</b> 여러 장을 고를 수 있어요 → 나머지 톡톡 → 오른쪽 위 <b>「선택」</b></p><div class="btns2"><button type="button" data-a="sortdate">🗓 찍은 날짜 순서로</button></div></div>`;
+  h += `<div class="grp"><h3>🗂 전체</h3><div class="btns2"><label class="btnf">＋ 사진 · 동영상 더<input type="file" data-a="addf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 내 파일에서 더<input type="file" data-a="addf" multiple hidden></label></div><h4>넣는 곳</h4>${chips('insm', { cur: '📍 빨간 커서 앞 (지금 장면 앞)', end: '⏭ 맨 뒤' }, P.insMode || 'cur')}<p class="hint" style="margin:6px 0 0">📁 「작업 선택」이 나오면 <b>파일</b>을 고르고 → 첫 사진을 <b>꾹(길게) 누르면</b> 여러 장을 고를 수 있어요 → 나머지 톡톡 → 오른쪽 위 <b>「선택」</b></p><div class="btns2"><button type="button" data-a="sortdate">🗓 찍은 날짜 순서로</button></div></div>`;
   return h;
 }
 /* ── 💬 자막 ── */
@@ -335,7 +391,7 @@ function pStk(c) {
 }
 /* ── ✨ 효과 ── */
 function pFx(c) {
-  let h = head(c); if (!c) return h;
+  let h = transBox() + head(c); if (!c) return h;
   if (c.kind !== 'card') {
     h += `<div class="grp"><h3>🎨 색감</h3>${chips('flt', Object.assign({ auto: ['추천'] }, FILTERS), c.filter)}<button type="button" data-a="allflt" class="sec">모든 장면에 같게</button></div>
      <div class="grp"><h3>✨ 화면 효과 <small>여러 개 가능</small></h3><div class="chips">${Object.entries(EFX).map(([k, v]) => `<button type="button" data-a="efx" data-v="${k}"${pressed((c.efx || []).includes(k), true)}>${v}</button>`).join('')}</div></div>`;
@@ -347,6 +403,150 @@ function pFx(c) {
     <p class="hint">재생바를 원하는 곳에 두고 누르세요. 소리는 프로그램이 직접 만들어서 저작권 걱정이 없어요.</p></div>`;
   return h;
 }
+/* ═════════ 순서 도우미: 맨 앞 · 맨 뒤 · 고정(📌 첫 화면 · 🏁 엔딩) · 커서 앞에 넣기 ═════════ */
+const isTitle = c => c && c.kind === 'card' && c.card === 'title', isEndC = c => c && c.kind === 'card' && c.card !== 'title';
+const freeImg = x => x.kind === 'image' && !x.pin;
+function fixPins() {
+  if (!P || !P.clips) return; const L = P.clips, selC = SEL >= 0 ? L[SEL] : null;
+  const ti = L.filter(isTitle), en = L.filter(isEndC), pf = L.filter(c => c.pin === 'first'), pl = L.filter(c => c.pin === 'last');
+  pf.slice(1).forEach(c => { c.pin = null; }); pl.slice(1).forEach(c => { c.pin = null; });
+  const f1 = pf[0], l1 = pl[0], mid = L.filter(c => !isTitle(c) && !isEndC(c) && c !== f1 && c !== l1);
+  const nl = [...ti, ...(f1 ? [f1] : []), ...mid, ...(l1 ? [l1] : []), ...en];
+  if (nl.some((c, i) => c !== L[i])) { P.clips = nl; if (selC) SEL = nl.indexOf(selC); }
+}
+function movRange() { const L = P.clips; let lo = 0, hi = L.length - 1; while (lo < L.length && (isTitle(L[lo]) || L[lo].pin === 'first')) lo++; while (hi >= 0 && (isEndC(L[hi]) || L[hi].pin === 'last')) hi--; return [lo, Math.max(lo - 1, hi)]; }
+function insPos() { if (P.insMode === 'end') return null; const A = clipAt(P, T); if (A.i < 0) return null; const [lo, hi] = movRange(); return clamp(A.i, lo, hi + 1); }
+/* 그림 칸 채우기 (data-gth = 자료 id) */
+function fillThumbs(root) {
+  root.querySelectorAll('[data-gth]').forEach(el => { const th = ED.thumbs.get(el.dataset.gth); if (!th || el.querySelector('canvas')) return; const cv = document.createElement('canvas'); cv.width = 96; cv.height = 96; const r = ED.coverRect(th.width, th.height, 96, 96, .5, .5); cv.getContext('2d').drawImage(th, r[0], r[1], r[2], r[3]); el.prepend(cv); });
+}
+/* ═════════ 🔀 장면 전환 (전체) · 🥁 박자 ═════════ */
+function transBox() {
+  const pp = PURPOSE[P.purpose];
+  return `<div class="grp"><h3>🔀 장면 전환 (전체) <small>사진이 넘어갈 때 모양</small></h3>${chips('tmode', { one: `🎯 추천 한 가지 (${TRANS[pp.tr] || pp.tr})`, mix: '🎲 골고루 섞기 (자동)', cut: '⚡ 바로 넘기기' }, P.transMode || 'one')}
+    <h4>전환 속도</h4>${chips('tspd', { fast: '빠르게', normal: '보통', slow: '느리게' }, P.transSpeed || 'normal')}
+    <div class="btns2"><button type="button" data-a="tbeat">🥁 박자에 맞춰 넘기기</button><button type="button" data-a="treset">🔄 손으로 바꾼 것도 전체 방식으로</button></div>
+    <p class="hint">장면 하나만 바꾸려면 그 장면을 고르고 ✂️ 편집 탭의 「🔀 넘어가는 효과」에서 골라요 (손으로 바꾼 장면은 그대로 지켜요). 🤖 AI 탭으로 맡기면 AI가 장면마다 어울리는 전환도 골라 줘요.</p></div>`;
+}
+function findBeats(buf) {
+  const sr = buf.sampleRate, hop = 512, ch0 = buf.getChannelData(0), ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : ch0, n = Math.floor(ch0.length / hop);
+  if (n < 200) return null; const env = new Float32Array(n);
+  for (let i = 0; i < n; i++) { let s = 0; const o = i * hop; for (let k = 0; k < hop; k += 2) { const v = (ch0[o + k] + ch1[o + k]) * .5; s += v * v; } env[i] = Math.log(1e-6 + s); }
+  const on = new Float32Array(n); for (let i = 1; i < n; i++) on[i] = Math.max(0, env[i] - env[i - 1]);
+  const hs = hop / sr, minL = Math.round(60 / 180 / hs), maxL = Math.round(60 / 65 / hs); let best = 0, bl = minL;
+  for (let L = minL; L <= maxL; L++) { let s = 0; for (let i = 0; i + L < n; i++) s += on[i] * on[i + L]; const bpm = 60 / (L * hs), w = Math.exp(-Math.pow(Math.log2(bpm / 115), 2) * 1.5); if (s * w > best) { best = s * w; bl = L; } }
+  let bp = 0, bs = -1; for (let ph = 0; ph < bl; ph++) { let s = 0; for (let i = ph; i < n; i += bl) s += on[i]; if (s > bs) { bs = s; bp = ph; } }
+  return { period: bl * hs, phase: bp * hs };
+}
+async function beatSync() {
+  let buf = null; const mf = musFile(); if (mf) { const s = SRC.get(mf.id); buf = s && s.buf; }
+  if (!buf) { try { buf = await ED.musicBuf(timeline(P).total); } catch (e) { buf = null; } }
+  if (!buf) return toast('🎵 음악이 있어야 박자를 찾을 수 있어요');
+  busy('🥁 박자 찾는 중…'); await sleep(40); let bt = null; try { bt = findBeats(buf); } catch (e) { bt = null; } busy('');
+  if (!bt) return toast('박자를 찾지 못했어요');
+  const per = bt.period, beats = per < .45 ? 2 : 1; let t = 0, k = 0;
+  for (const c of P.clips) {
+    const len = clipLen(c); if (c.kind !== 'image') { t += len; continue; }
+    const want = t + c.dur, step = per * beats; let e2 = bt.phase + Math.round((want - bt.phase) / step) * step;
+    while (e2 - t < Math.max(1, step * .9)) e2 += step;
+    c.dur = Math.round((e2 - t) * 100) / 100; t = e2; k++;
+  }
+  commit(); renderPanel(); toast(`🥁 박자(약 ${Math.round(60 / per)} BPM)에 맞춰 사진 ${k}장이 넘어가요 · ▶로 들어 보세요`, 4500);
+}
+/* ═════════ 🧩 사진 순서 정하기: 🎤 가사 보며 고르기 · 🤖 AI 짝짓기 · 🔢 순서대로 톡톡 ═════════ */
+let ORDM = '', LYROPEN = -1, TAPORD = [], ORDREST = 'after', LMANS = '';
+const saveT2 = () => { commit(true); };
+function pOrder() {
+  const hasL = !!(P.lyrics && P.lyrics.lines && P.lyrics.lines.length && musFile());
+  if (!ORDM) ORDM = hasL ? 'lyr' : 'tap';
+  let h = `<div class="grp"><h3>🧩 사진 순서 정하기</h3>${chips('ordm', { lyr: '🎤 가사 보며 고르기', ai: '🤖 AI가 짝짓기', tap: '🔢 순서대로 톡톡' }, ORDM)}
+    <p class="hint" style="margin-bottom:0">${ORDM === 'lyr' ? '가사 줄마다 어울리는 사진을 골라요 → 그 가사를 부르는 동안 그 사진이 나와요.' : ORDM === 'ai' ? 'AI가 사진을 보고 가사 줄마다 어울리는 사진을 골라 줘요 → 🎤 화면에서 확인 · 고치기.' : '사진을 보여 줄 순서대로 톡톡 누르면 번호가 붙어요 → ✅ 정리.'} 한두 장만 옮길 때는 아래 사진 줄에서 <b>사진을 꾹 눌러 끌어도</b> 돼요.</p></div>`;
+  if (ORDM === 'tap') return h + tapUI();
+  if (!hasL) return h + `<div class="grp"><p style="margin-top:0">먼저 <b>🎵 소리</b> 탭에서 ① 내 음악(MP3)을 넣고 ② <b>🎤 노래 가사 자막</b>을 넣어 주세요. 가사 줄마다 사진을 고를 수 있어요.</p><button type="button" data-a="gotab" data-v="snd" class="sec">🎵 소리 탭 열기</button></div>`;
+  return h + (ORDM === 'lyr' ? lyrUI() : aiUI());
+}
+function mediaSrcs() { const order = []; P.clips.forEach(c => { if (c.src && !order.includes(c.src) && !c.pin) order.push(c.src); }); P.srcs.forEach(s => { if (s.kind !== 'audio' && !order.includes(s.id) && !P.clips.some(c => c.pin && c.src === s.id)) order.push(s.id); }); return order.filter(id => P.srcs.some(s => s.id === id)); }
+function storyRows() { const n = P.lyrics.lines.length; if (!P.story || !Array.isArray(P.story.rows) || P.story.rows.length !== n) P.story = { rows: Array.from({ length: n }, () => []) }; return P.story.rows; }
+function lyrUI() {
+  const lines = P.lyrics.lines, rows = storyRows(), used = new Map(); rows.forEach((r, i) => r.forEach(id => { if (!used.has(id)) used.set(id, i); }));
+  const done = rows.filter(r => r.length).length, ms = mediaSrcs();
+  let h = `<div class="grp"><h3>🎤 가사 보며 사진 고르기 <small>가사 ${lines.length}줄 · 고른 줄 ${done}개</small></h3>
+    <p class="hint" style="margin-top:0">「📷 사진 고르기」를 누르고 어울리는 사진을 톡톡 (한 줄에 여러 장 가능). 안 고른 줄은 <b>남은 사진으로 자동으로</b> 채워요. 📌 첫 화면 · 🏁 엔딩 고정 사진은 그대로 앞뒤에 있어요.</p>
+    <div class="btns2"><button type="button" data-a="lbuild" class="pri">🎬 이 가사 순서로 영상 만들기</button><button type="button" data-a="lclear" class="dg" style="margin-top:0">🗑 고른 것 지우기</button></div></div>`;
+  h += lines.map((L, i) => {
+    const r = rows[i], open = i === LYROPEN;
+    let row = `<div class="lrow${open ? ' open' : ''}"><div class="lrh"><b>${fmtS(L.t)}</b>${esc(L.text)}</div><div class="lph">${r.map(id => `<span class="lth" data-gth="${id}"></span>`).join('')}${r.length ? '' : '<span class="lauto">자동</span>'}<button type="button" data-a="lpick" data-v="${i}" class="sec">${open ? '✅ 다 골랐어요' : r.length ? '✏️ 바꾸기' : '📷 사진 고르기'}</button></div>`;
+    if (open) row += `<div class="ggrid">${ms.map(id => { const k = r.indexOf(id), u = used.get(id), sm = P.srcs.find(s => s.id === id); return `<button type="button" class="gbtn${k >= 0 ? ' on' : ''}" data-a="lsel" data-v="${id}"><span data-gth="${id}"></span>${k >= 0 ? `<em>${k + 1}</em>` : u != null && u !== i ? `<i>L${u + 1}</i>` : ''}<small>${esc(sm ? sm.code : '')}</small></button>`; }).join('')}</div><p class="hint">숫자 = 이 줄에서 나오는 순서 · 「L3」 = 다른 줄(3번째)에 이미 고른 사진</p>`;
+    return row + '</div>';
+  }).join('');
+  return h;
+}
+function buildFromLyrics() {
+  const Ly = P.lyrics, mf = musFile(); if (!Ly || !Ly.lines.length || !mf) return toast('먼저 내 음악과 가사를 넣어 주세요');
+  if (!confirm2('장면 순서를 가사에 맞게 새로 만들어요.\n(사진 모양 · 효과는 그대로 가져오고, 장면 자막은 다시 넣어야 할 수 있어요 · ↩️ 되돌리기 가능)\n만들까요?')) return;
+  const lines = Ly.lines, rows = storyRows(), title = P.clips.find(isTitle), endc = P.clips.find(isEndC), pf = P.clips.find(c => c.pin === 'first'), pl = P.clips.find(c => c.pin === 'last');
+  const proto = {}; P.clips.forEach(c => { if (c.src && !proto[c.src]) proto[c.src] = c; });
+  const used = new Set(rows.flat()); let pool = mediaSrcs().filter(id => !used.has(id)); const all = mediaSrcs(); let pi = 0;
+  const take = () => pool.length ? pool.shift() : (all.length ? all[(pi++) % all.length] : null);
+  const out = [];
+  const mk = (id, d) => { const s = P.srcs.find(x => x.id === id); if (!s) return null; const c = s.kind === 'image' ? ED.newClip('image', id, { dur: d }) : ED.newClip('video', id, { in: 0, out: Math.min(s.dur, d) }); if (s.kind === 'video' && s.dur < d) c.hold = Math.min(3, d - s.dur); const p = proto[id]; if (p) ['fit', 'fx', 'fy', 'kb', 'filter', 'efx', 'stk', 'blur', 'trans', 'speed', 'mute', 'vol'].forEach(k => { if (p[k] !== undefined) c[k] = JSON.parse(JSON.stringify(p[k])); }); if (s.kind === 'video') { c.speed = 1; c.in = 0; c.out = Math.min(s.dur, d); } return c; };
+  const seg = (ids, dur) => { ids = ids.filter(Boolean); if (dur <= .05) return; if (dur < .6 || !ids.length) { const lc = out[out.length - 1]; if (lc && lc.kind === 'image') lc.dur += dur; return; } while (ids.length < 24 && dur / ids.length > 7) { const x = take(); if (!x) break; ids.push(x); } const n = Math.min(ids.length, Math.max(1, Math.floor(dur / 1.2))), d = dur / n; ids.slice(0, n).forEach(id => { const c = mk(id, d); if (c) out.push(c); }); };
+  let t = (title ? clipLen(title) : 0) + (pf ? clipLen(pf) : 0); const endT = Math.max(t + 1, mf.dur - (endc ? clipLen(endc) : 0) - (pl ? clipLen(pl) : 0));
+  const f0 = Math.min(endT, Math.max(t, lines[0].t)); if (f0 - t > .6) seg(Array.from({ length: Math.max(1, Math.round((f0 - t) / 4)) }, take), f0 - t); else if (out.length === 0 && f0 > t) { /* 짧은 머리 → 첫 줄에 합침 */ }
+  t = Math.max(t, Math.min(f0, t + (f0 - t > .6 ? f0 - t : 0)));
+  for (let i = 0; i < lines.length && t < endT - .3; i++) {
+    const s0 = Math.max(t, lines[i].t), e0 = i + 1 < lines.length ? Math.min(endT, Math.max(s0, lines[i + 1].t)) : endT;
+    if (s0 > t + .05) { const lc = out[out.length - 1]; if (lc && lc.kind === 'image') lc.dur += s0 - t; else seg([take()], s0 - t); }
+    const ids = rows[i].length ? rows[i].slice() : Array.from({ length: Math.max(1, Math.round((e0 - s0) / 4.5)) }, take);
+    seg(ids, e0 - s0); t = e0;
+  }
+  if (endT - t > .05) { const lc = out[out.length - 1]; if (lc && lc.kind === 'image') lc.dur += endT - t; }
+  out.forEach(c => { if (c.kind === 'image') c.dur = Math.round(c.dur * 100) / 100; });
+  P.clips = [title, pf, ...out, pl, endc].filter(Boolean); SEL = -1; T = 0; LYROPEN = -1;
+  commit(); makeThumbs(); renderPanel(); toast(`🎬 가사 ${lines.length}줄에 맞춰 장면 ${out.length}개를 만들었어요 · ▶로 확인해 보세요`, 5000);
+}
+function aiUI() {
+  const lines = P.lyrics.lines, rows = storyRows(), done = rows.filter(r => r.length).length;
+  return `<div class="grp"><h3>① 모아보기 그림 만들기</h3><button type="button" data-a="lmsheet" class="pri">🧩 모아보기 그림 만들기 (사진 번호 붙이기)</button>
+    ${sheets.length ? `<div class="sheets">${sheets.map((x, i) => `<a href="${x.url}" target="_blank"><img src="${x.url}" alt="모아보기 ${i + 1}"></a>`).join('')}</div>` : ''}</div>
+   <div class="grp"><h3>② AI에게 보내기</h3><div class="two"><button type="button" data-a="lmsend" data-v="gpt" class="gpt">ChatGPT로 보내기</button><button type="button" data-a="lmsend" data-v="gem" class="gem">Gemini로 보내기</button></div>
+    <p class="hint">요청서(가사 ${lines.length}줄 포함)가 복사되고 그림을 보낼 곳이 열려요 → AI 앱에서 그림을 올리고 글 칸을 <b>길게 눌러 붙여넣기</b> → 보내기</p>
+    <details class="sub"><summary>요청서 보기</summary><pre class="pre">${esc(lmPrompt())}</pre><button type="button" data-a="lmcopy" class="sec">📋 요청서만 복사</button></details></div>
+   <div class="grp"><h3>③ AI 답 붙여넣기</h3><textarea id="lmAns" rows="5" placeholder="L1|P3,P7&#10;L2|P12">${esc(LMANS)}</textarea>
+    <div class="two"><button type="button" data-a="lmpaste" class="sec">📋 붙여넣기</button><button type="button" data-a="lmapply" class="pri">✅ 가사 줄에 넣기</button></div>
+    <p class="hint">넣으면 🎤 「가사 보며 고르기」 화면으로 바뀌어요 → 마음에 안 드는 줄만 고치고 <b>🎬 만들기</b>. 지금 고른 줄: ${done} / ${lines.length}</p></div>`;
+}
+function lmPrompt() {
+  const pp = PURPOSE[P.purpose], L = ['[BK쇼츠 가사 ↔ 사진 짝짓기 요청]', '첨부한 모아보기 그림은 제 사진(P1, P2 …)과 동영상(V1, V2 …)이에요. 각 칸 아래 노란 띠에 번호가 있어요.', '아래는 제가 만든 노래의 가사 줄(L1, L2 …)이에요. 가사 줄마다 그 내용과 분위기에 가장 잘 어울리는 사진 번호를 골라 주세요.', '', `영상 종류: ${pp.ic} ${pp.n}`];
+  if (aiExtra.trim()) L.push(`참고: ${aiExtra.trim()}`);
+  L.push('', '규칙', '- 한 줄에 사진 1~3개 (짧은 줄은 1개, 긴 줄은 2~3개)', '- 같은 사진은 되도록 한 번만 쓰고, 단체 사진은 후렴(반복되는 힘찬 줄)에 쓰면 좋아요', '- 흐릿하거나 어울리지 않는 사진은 안 써도 돼요', '- 인사말이나 설명 없이 아래 형식의 줄만 써 주세요', '', '형식', 'L1|P3,P7', 'L2|P12', '', '가사');
+  P.lyrics.lines.forEach((x, i) => L.push(`L${i + 1} [${fmtS(x.t)}] ${x.text}`));
+  return L.join('\n');
+}
+function lmApply(text) {
+  const rows = storyRows(); let n = 0;
+  String(text || '').split(/\r?\n/).forEach(l => { const m = l.trim().replace(/^[-*•]\s*/, '').match(/^L\s*(\d+)\s*[|:：]\s*(.+)$/i); if (!m) return; const i = +m[1] - 1; if (!rows[i]) return; const ids = (m[2].toUpperCase().match(/[PV]\d+/g) || []).map(code => (P.srcs.find(s => s.code === code) || {}).id).filter(Boolean); if (ids.length) { rows[i] = ids; n++; } });
+  if (!n) return toast('읽을 줄이 없어요 · 「L1|P3,P7」 모양인지 확인해 주세요', 5000);
+  saveT2(); ORDM = 'lyr'; LYROPEN = -1; renderPanel(); toast(`🤖 가사 ${n}줄에 AI가 고른 사진을 넣었어요 · 확인하고 🎬 만들기`, 5000);
+}
+function tapUI() {
+  const [lo, hi] = movRange(), mid = P.clips.slice(lo, hi + 1);
+  if (!mid.length) return '<div class="grp"><p class="empty">정리할 장면이 없어요.</p></div>';
+  TAPORD = TAPORD.filter(id => mid.some(c => c.id === id));
+  return `<div class="grp"><h3>🔢 순서대로 톡톡 <small>${TAPORD.length} / ${mid.length}장</small></h3>
+    <p class="hint" style="margin-top:0">보여 줄 순서대로 사진을 톡톡 누르세요 (다시 누르면 빠져요). 📌 첫 화면 · 🏁 엔딩 고정 · 오프닝 · 엔딩 카드는 그대로예요.</p>
+    <div class="ggrid">${mid.map(c => { const k = TAPORD.indexOf(c.id), sm = P.srcs.find(s => s.id === c.src); return `<button type="button" class="gbtn${k >= 0 ? ' on' : ''}" data-a="otap" data-v="${c.id}"><span data-gth="${c.src}"></span>${k >= 0 ? `<em>${k + 1}</em>` : ''}<small>${esc(sm ? sm.code : '')}${c.kind === 'video' ? ' 🎞' : ''}</small></button>`; }).join('')}</div>
+    <h4>안 누른 사진은</h4>${chips('orest', { after: '뒤에 그대로 두기', drop: '빼기' }, ORDREST)}
+    <div class="btns2"><button type="button" data-a="otapok" class="pri">✅ 이 순서로 정리</button><button type="button" data-a="otapclr" class="sec" style="margin-top:0">↺ 처음부터</button></div></div>`;
+}
+function tapApply() {
+  if (!TAPORD.length) return toast('사진을 순서대로 눌러 주세요');
+  const [lo, hi] = movRange(), mid = P.clips.slice(lo, hi + 1), sel = TAPORD.map(id => mid.find(c => c.id === id)).filter(Boolean), rest = mid.filter(c => !sel.includes(c));
+  if (ORDREST === 'drop' && rest.length && !confirm2(`안 누른 ${rest.length}장을 영상에서 뺄까요? (↩️ 되돌리기 가능)`)) return;
+  P.clips.splice(lo, hi - lo + 1, ...sel, ...(ORDREST === 'drop' ? [] : rest)); TAPORD = []; SEL = lo; T = timeline(P).st[lo] + .02;
+  commit(); renderPanel(); toast(`🔢 ${sel.length}장을 순서대로 정리했어요`);
+}
+
 /* ── 🎵 노래 끝까지: 사진 시간 자동 맞추기 ──
    사진 한 장은 3.5~5초가 보기 좋아요 → 노래 1분에 사진 12~17장.
    · ⏱ 사진 시간 늘리기: 지금 사진만으로 노래 길이를 나눔 (한 장이 너무 길어지면 반복을 권함)
@@ -354,7 +554,7 @@ function pFx(c) {
 function musFile() { const M = P.music; if (M.kind !== 'file' || !M.fileId) return null; const s = P.srcs.find(x => x.id === M.fileId); return s && s.dur ? s : null; }
 function musFitInfo() {
   const mf = musFile(); if (!mf) return null;
-  const imgs = P.clips.filter(x => x.kind === 'image'), fixed = P.clips.filter(x => x.kind !== 'image').reduce((a, x) => a + clipLen(x), 0);
+  const imgs = P.clips.filter(freeImg), fixed = P.clips.filter(x => !freeImg(x)).reduce((a, x) => a + clipLen(x), 0);
   const L = mf.dur, avail = L - fixed, n = imgs.length, per = n ? avail / n : 0, reps = imgs.filter(x => x.rep).length;
   return { L, avail, n, per, reps, lo: Math.max(1, Math.round(avail / 5)), hi: Math.max(1, Math.round(avail / 3.5)), total: timeline(P).total };
 }
@@ -364,6 +564,7 @@ function musFitBox() {
   return `<div class="grp" style="background:#fff8e6;border:2px solid #f2c14e;border-radius:14px;padding:10px 12px;margin-top:10px"><h3 style="margin-top:0">🎵 노래 끝까지 — 사진 시간 자동 맞추기</h3>
     <p>노래 <b>${fmtS(f.L)}</b> · 지금 영상 <b>${fmtS(f.total)}</b> · 사진 <b>${orig}장</b>${f.reps ? ` (+ 한 번 더 ${f.reps}장)` : ''}</p>
     <p class="hint">📌 이 노래에는 사진 <b>${f.lo}~${f.hi}장</b>이 딱 좋아요 (한 장 3.5~5초). 노래 1분에 사진 12~17장 정도예요.</p>
+    <button type="button" data-a="tbeat" class="sec" style="margin-bottom:6px">🥁 박자에 맞춰 사진 넘기기 <small>(맞추기 다음에 누르세요)</small></button>
     <div class="btns2"><button type="button" data-a="mfit" data-v="stretch" class="pri">⏱ 지금 사진으로 맞추기<small style="display:block;font-weight:600">한 장 ${per.toFixed(1)}초${few ? ' → 최대 12초' : ''}</small></button><button type="button" data-a="mfit" data-v="repeat">🔁 사진 한 번 더 섞어서<small style="display:block;font-weight:600">한 장 4.5초쯤 · 같은 사진 최대 2번 더</small></button></div>
     ${many ? '<p class="hint" style="color:#b91c1c">⚠️ 사진이 노래보다 많아요. 맞추면 한 장이 아주 짧아져요 (사진을 줄이거나 더 긴 노래로).</p>' : slow ? '<p class="hint">💡 한 장이 6초가 넘으면 지루할 수 있어요 → <b>🔁 섞어서 한 번 더</b>나 사진을 더 넣는 걸 추천해요. 사진 움직임(천천히 확대)도 켜져요.</p>' : ''}
     ${f.reps ? '<button type="button" data-a="mfit" data-v="unrep" class="sec">↩ 한 번 더 넣은 사진 빼기</button>' : ''}</div>`;
@@ -371,16 +572,16 @@ function musFitBox() {
 function musFit(mode) {
   const f = musFitInfo(); if (!f) return toast('먼저 📁 내 음악 파일을 넣어 주세요');
   if (mode === 'unrep' || mode === 'repeat') { P.clips = P.clips.filter(x => !x.rep); }
-  let imgs = P.clips.filter(x => x.kind === 'image'); if (!imgs.length) return toast('사진이 없어요');
-  const fixed = P.clips.filter(x => x.kind !== 'image').reduce((a, x) => a + clipLen(x), 0), avail = f.L - fixed;
+  let imgs = P.clips.filter(freeImg); if (!imgs.length) return toast('사진이 없어요');
+  const fixed = P.clips.filter(x => !freeImg(x)).reduce((a, x) => a + clipLen(x), 0), avail = f.L - fixed;
   if (mode === 'repeat') {
     const want = Math.max(imgs.length, Math.round(avail / 4.5)), extra = Math.min(want - imgs.length, imgs.length * 2); /* 같은 사진은 최대 2번 더 */
     if (extra > 0) {
       const sh = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
       const add = []; let pool = [], last = imgs[imgs.length - 1];
       while (add.length < extra) { if (!pool.length) pool = sh(imgs); let k = pool.findIndex(x => x.src !== (add.length ? add[add.length - 1].src : last.src)); if (k < 0) k = 0; const o = pool.splice(k, 1)[0], d = JSON.parse(JSON.stringify(o)); d.id = uid('c'); d.rep = 1; d.cap = { t: '' }; d.sfx = []; d.vo = null; d.trans = 'auto'; add.push(d); }
-      let pos = P.clips.length; const lc = P.clips[pos - 1]; if (lc && lc.kind === 'card' && lc.card !== 'title') pos--;
-      P.clips.splice(pos, 0, ...add); imgs = P.clips.filter(x => x.kind === 'image');
+      const pos = movRange()[1] + 1;
+      P.clips.splice(pos, 0, ...add); imgs = P.clips.filter(freeImg);
     }
   }
   if (mode === 'unrep') { commit(); renderPanel(); return toast('↩ 한 번 더 넣은 사진을 뺐어요'); }
@@ -491,7 +692,7 @@ const TONES = { fun: '배꼽 잡게 웃긴 예능 자막 말투', touch: '마음
 function aiPrompt(gemVideo) {
   const pp = PURPOSE[P.purpose], B = ED.brand(), tone = aiTone ? TONES[aiTone] : pp.tone, ratio = RATIOS[P.ratio][2];
   const L = ['[BK쇼츠 영상 편집 요청]'];
-  const fxList = '확대, 흔들림, 번쩍, 느리게, 빠르게, 멈춤, 흑백, 옛날필름, 하트, 꽃가루, 눈, 꽃잎', sfxList = '박수, 띠용, 뿅, 두둥, 딩동댕, 땡, 휙, 짜잔, 찰칵, 두구두구, 반짝, 두근';
+  const trList = '스르르, 줌, 줌축소, 휙, 옆으로, 위로, 번쩍, 검은화면, 닦아내기, 동그랗게, 흐릿하게, 빙글, 지지직, 하트, 바로', fxList = '확대, 흔들림, 번쩍, 느리게, 빠르게, 멈춤, 흑백, 옛날필름, 하트, 꽃가루, 눈, 꽃잎', sfxList = '박수, 띠용, 뿅, 두둥, 딩동댕, 땡, 휙, 짜잔, 찰칵, 두구두구, 반짝, 두근';
   if (aiMode === 'caps') {
     L.push('첨부한 그림은 지금 만든 영상의 장면들(C1, C2 …)이에요. 장면 순서와 길이는 그대로 두고, 장면마다 자막과 효과만 정해 주세요.', '');
     L.push('장면 목록:'); P.clips.forEach((c, i) => L.push(`C${i + 1} · ${c.kind === 'card' ? (c.card === 'title' ? '오프닝 제목 카드' : '엔딩 카드') : c.kind === 'video' ? '동영상' : '사진'} · ${clipLen(c).toFixed(1)}초`));
@@ -505,9 +706,9 @@ function aiPrompt(gemVideo) {
   if (pp.biz && B) L.push(`가게 · 회사 정보: ${[B.name, B.biz, B.slogan, B.menu && ('메뉴/상품: ' + B.menu.replace(/\n/g, ', ')), B.addr && ('주소: ' + B.addr), B.hours && ('영업: ' + B.hours), B.event && ('이벤트: ' + B.event)].filter(Boolean).join(' / ')}`);
   L.push('', '규칙');
   if (aiMode === 'all') L.push('- 사진은 3~5초, 동영상은 재미있거나 의미 있는 부분만 골라 2~8초씩', '- 같은 동영상을 여러 구간으로 나눠 써도 돼요. 흐릿하거나 흔들린 장면은 빼 주세요', '- 사진은 시작초를 0, 끝초를 「보여 줄 초」로 써 주세요');
-  L.push('- 자막은 한 줄 15자 안팎, 길면 두 줄까지. 모르는 사람 이름은 지어내지 마세요', `- 효과는 이 중에서만 (없으면 비워 두기): ${fxList}`, `- 효과음은 이 중에서만 (없으면 비워 두기): ${sfxList}`, '- 인사말이나 설명 없이 아래 형식의 줄만 써 주세요', '', '형식');
-  if (aiMode === 'caps') L.push('제목|오프닝 카드에 쓸 제목', 'C1|자막|효과|효과음', 'C2|자막|효과|효과음', '엔딩|마지막 카드 문구');
-  else L.push('제목|영상 제목', '장면|자료|시작초|끝초|자막|효과|효과음', '1|P3|0|4|그 시절 우리|확대|', '2|V1|12|18|이 표정 실화냐ㅋㅋ|흔들림|띠용', '엔딩|마지막 카드 문구', '음악|잔잔한 · 신나는 · 감동 · 귀여운 · 웅장한 · 감성 중 하나');
+  L.push('- 자막은 한 줄 15자 안팎, 길면 두 줄까지. 모르는 사람 이름은 지어내지 마세요', `- 효과는 이 중에서만 (없으면 비워 두기): ${fxList}`, `- 효과음은 이 중에서만 (없으면 비워 두기): ${sfxList}`, `- 전환(이 장면이 시작될 때 넘어가는 모양)은 장면 분위기에 맞게 골고루, 이 중에서만: ${trList}`, '- 인사말이나 설명 없이 아래 형식의 줄만 써 주세요', '', '형식');
+  if (aiMode === 'caps') L.push('제목|오프닝 카드에 쓸 제목', 'C1|자막|효과|효과음|전환', 'C2|자막|효과|효과음|전환', '엔딩|마지막 카드 문구');
+  else L.push('제목|영상 제목', '장면|자료|시작초|끝초|자막|효과|효과음|전환', '1|P3|0|4|그 시절 우리|확대||스르르', '2|V1|12|18|이 표정 실화냐ㅋㅋ|흔들림|띠용|휙', '엔딩|마지막 카드 문구', '음악|잔잔한 · 신나는 · 감동 · 귀여운 · 웅장한 · 감성 중 하나');
   return L.join('\n');
 }
 const FXMAP = [[/확대|줌/, c => add(c, 'punch')], [/흔들/, c => add(c, 'shake')], [/번쩍|플래시/, c => add(c, 'flash')], [/느리|슬로/, c => { if (c.kind === 'video') c.speed = .5; }], [/빠르/, c => { if (c.kind === 'video') c.speed = 2; }], [/멈춤|정지/, c => { if (c.kind === 'video') c.hold = 1.5; }], [/흑백/, c => { c.filter = 'bw'; }], [/옛날|필름/, c => { add(c, 'grain'); c.filter = 'old'; }], [/하트/, c => add(c, 'heart')], [/꽃가루|축하/, c => add(c, 'confetti')], [/^눈|눈 ?내/, c => add(c, 'snow')], [/꽃잎|벚꽃/, c => add(c, 'petal')]];
@@ -528,14 +729,14 @@ function aiApply(text) {
     if (/^장면$/.test(k0)) continue;
     if (aiMode === 'caps') {
       const m = k0.match(/^C\s*(\d+)/i); if (!m) continue; const c = P.clips[+m[1] - 1]; if (!c) continue;
-      c.cap.t = f[1] || ''; applyFx(c, f[2]); applySfx(c, f[3]); n++;
+      c.cap.t = f[1] || ''; applyFx(c, f[2]); applySfx(c, f[3]); applyTr(c, f[4]); n++;
     } else {
       const code = (f[1] || '').toUpperCase().match(/[PV]\d+/); if (!code) continue;
       const s = P.srcs.find(x => x.code === code[0]); if (!s) continue;
       let a = secs(f[2]), b = secs(f[3]); const c = ED.newClip(s.kind, s.id);
       if (s.kind === 'image') c.dur = clamp(b > 0 ? b - (a > 0 && a < b ? a : 0) : pp.img, 1.5, 10);
       else { a = clamp(isNaN(a) ? 0 : a, 0, Math.max(0, s.dur - .3)); b = isNaN(b) || b <= a ? Math.min(s.dur, a + 4) : Math.min(s.dur, b); if (b - a < .4) b = Math.min(s.dur, a + .4); c.in = a; c.out = b; }
-      c.cap.t = (f[4] || '').replace(/\\n|\/\s/g, '\n'); applyFx(c, f[5]); applySfx(c, f[6]); scenes.push(c);
+      c.cap.t = (f[4] || '').replace(/\\n|\/\s/g, '\n'); applyFx(c, f[5]); applySfx(c, f[6]); applyTr(c, f[7]); scenes.push(c);
     }
   }
   if (aiMode === 'all') {
@@ -546,6 +747,8 @@ function aiApply(text) {
   SEL = -1; T = 0; commit(); renderPanel(); makeThumbs();
   toast(`🤖 ${n}개 장면에 넣었어요 · ▶ 눌러 보세요 (마음에 안 들면 ↩️)`, 4500);
 }
+const TRMAP = [[/스르/, 'fade'], [/줌\s*축소|축소/, 'zoomout'], [/줌|확대/, 'zoom'], [/휙/, 'whoosh'], [/옆/, 'slide'], [/위로/, 'up'], [/번쩍|하얀/, 'white'], [/검은/, 'black'], [/닦/, 'wipe'], [/동그/, 'circle'], [/흐릿|블러/, 'blur'], [/빙글|회전/, 'spin'], [/지지|글리치/, 'glitch'], [/하트/, 'heart'], [/바로|컷/, 'cut']];
+function applyTr(c, s) { if (!s) return; const m = TRMAP.find(([r]) => r.test(s)); if (m) c.trans = m[1]; }
 function applyFx(c, s) { if (!s) return; for (const [r, fn] of FXMAP) if (r.test(s)) fn(c); }
 function applySfx(c, s) { if (!s) return; const m = SFXMAP.find(([r]) => r.test(s)); if (m) { c.sfx = c.sfx || []; c.sfx.push({ k: m[1], at: .2 }); } }
 /* ── 🏷 정보 ── */
@@ -618,6 +821,7 @@ $('panel').addEventListener('input', e => {
   if ((a === 'bw' || a === 'bh') && c && SELOV) { c.blur[SELOV.k][a === 'bw' ? 'w' : 'h'] = +v; drawNow(); return; }
   if (a === 'it') { P.info[el.dataset.v] = v; drawNow(); return; }
   if (a === 'lyrsz') { if (P.lyrics) { P.lyrics.size = +v; drawNow(); } return; }
+  if (el.id === 'lmAns') { LMANS = v; return; }
   if (a === 'lyr') { P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; P.lyrics.raw = v; return; }
   if (a === 'bf') { const L = ED.brands(), b = L.find(x => x.id === P.info.brandId); if (b) { b[el.dataset.v] = v; ED.saveBrands(L); drawNow(); } return; }
 });
@@ -626,7 +830,7 @@ $('panel').addEventListener('change', async e => {
   if (el.type === 'range' || el.tagName === 'TEXTAREA' || el.type === 'text' || el.type === 'color') { if (a === 'in' || a === 'out') makeThumbs(); commit(); if (a === 'in' || a === 'out' || a === 'dur') renderPanel(); return; }
   if (el.type === 'file') {
     const fs = Array.from(el.files || []); el.value = ''; if (!fs.length) return;
-    if (a === 'addf') { const n = await addFiles(fs); commit(); renderPanel(); toast(`＋ ${n}개를 넣었어요`); }
+    if (a === 'addf') { const pos = insPos(), n = await addFiles(fs, pos); commit(); if (n && pos != null) select(pos, true); else renderPanel(); toast(pos == null ? `＋ ${n}개를 맨 뒤에 넣었어요` : `＋ ${n}개를 장면 ${pos + 1} 자리(커서 앞)에 넣었어요`, 3500); }
     if (a === 'musf') { const f = fs[0], id = uid('s'), meta = { id, code: 'A' + (P.nA++), kind: 'audio', name: f.name }; busy('음악 여는 중…'); const s = await ED.loadSource(meta, f); busy(''); if (!s.buf) return toast('음악 파일을 열 수 없어요 (MP3 · M4A 권장)'); meta.dur = s.dur; P.srcs.push(meta); try { await IDB.put('f', id, f); } catch (er) { /* 공간 */ } P.music.kind = 'file'; P.music.fileId = id; commit(); renderPanel(); toast(timeline(P).total < s.dur - 3 ? '🎵 내 음악을 넣었어요 · 노래가 영상보다 길어요 → 아래 「노래 끝까지 자동 맞추기」를 눌러 보세요' : '🎵 내 음악을 넣었어요', 4500); }
     if (a === 'logo') { const f = fs[0], url = URL.createObjectURL(f), im = await ENG.loadImage(url), k = Math.min(1, 360 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); const L = ED.brands(), b = L.find(x => x.id === P.info.brandId); if (b) { b.logo = cv.toDataURL('image/png'); ED.saveBrands(L); } commit(); renderPanel(); }
   }
@@ -654,6 +858,47 @@ $('panel').addEventListener('click', async e => {
     case 'mute': if (c) { c.mute = +v; return re(); } return;
     case 'hold': if (c) { c.hold = +v; return re(); } return;
     case 'mfit': return musFit(v);
+    case 'mvfirst': case 'mvlast': case 'mvto': {
+      if (!c || c.kind === 'card') return; if (c.pin) return toast('고정된 장면이에요 · 먼저 「고정 풀기」를 눌러 주세요');
+      const [lo, hi] = movRange(); let j = a === 'mvfirst' ? lo : a === 'mvlast' ? hi : null;
+      if (a === 'mvto') { const n = parseInt(g.prompt(`몇 번째 장면으로 옮길까요? (${lo + 1} ~ ${hi + 1})`, String(SEL + 1)), 10); if (!n) return; j = clamp(n - 1, lo, hi); }
+      P.clips.splice(SEL, 1); P.clips.splice(j, 0, c); SEL = j; toast(`${j + 1}번째로 옮겼어요`); return re();
+    }
+    case 'pin': {
+      if (!c || c.kind === 'card') return;
+      if (!v) { c.pin = null; toast('고정을 풀었어요'); return re(); }
+      P.clips.forEach(x => { if (x.pin === v) x.pin = null; }); c.pin = v;
+      const dup = P.clips.filter(x => x !== c && x.src === c.src && !x.pin);
+      if (dup.length && confirm2(`같은 사진(영상)이 중간에도 ${dup.length}번 들어 있어요.\n중간에 있는 것은 뺄까요?`)) P.clips = P.clips.filter(x => !dup.includes(x));
+      commit(); SEL = P.clips.indexOf(c); renderPanel(); renderTL(); return toast(v === 'first' ? '📌 첫 화면으로 고정했어요 · 오프닝 카드 배경도 이 사진이에요' : '🏁 엔딩 화면으로 고정했어요 · 엔딩 카드 배경도 이 사진이에요', 4000);
+    }
+    case 'insm': P.insMode = v; return re();
+    case 'tmode': P.transMode = v; toast(v === 'mix' ? '🎲 장면마다 어울리는 전환을 골고루 넣었어요 · ▶로 보세요' : v === 'cut' ? '⚡ 효과 없이 바로 넘어가요' : '🎯 추천 전환 한 가지로 해요'); return re();
+    case 'tspd': P.transSpeed = v; return re();
+    case 'treset': P.clips.forEach(x => { x.trans = 'auto'; }); toast('🔄 모든 장면을 전체 방식으로 맞췄어요'); return re();
+    case 'tbeat': return beatSync();
+    case 'ordm': ORDM = v; LYROPEN = -1; return renderPanel();
+    case 'gotab': TAB = v; renderTabs(); return renderPanel();
+    case 'otap': { const k = TAPORD.indexOf(v); if (k >= 0) TAPORD.splice(k, 1); else TAPORD.push(v); return renderPanel(); }
+    case 'otapclr': TAPORD = []; return renderPanel();
+    case 'orest': ORDREST = v; return renderPanel();
+    case 'otapok': return tapApply();
+    case 'lpick': LYROPEN = +v === LYROPEN ? -1 : +v; renderPanel(); { const r = $('panel').querySelector('.lrow.open'); if (r) r.scrollIntoView({ behavior: 'smooth', block: 'start' }); } return;
+    case 'lsel': { const rows = storyRows(); if (LYROPEN < 0) return; const L = rows[LYROPEN], k = L.indexOf(v); if (k >= 0) L.splice(k, 1); else L.push(v); saveT2(); return renderPanel(); }
+    case 'lclear': if (!confirm2('가사 줄마다 고른 사진을 모두 지울까요?')) return; P.story = null; LYROPEN = -1; saveT2(); return renderPanel();
+    case 'lbuild': return buildFromLyrics();
+    case 'lmsheet': { busy('🧩 모아보기 그림 만드는 중…'); try { sheets.forEach(x => URL.revokeObjectURL(x.url)); sheets = await ED.contactSheets('all'); } catch (er) { toast('그림을 만들지 못했어요: ' + er.message, 5000); } busy(''); return renderPanel(); }
+    case 'lmsend': {
+      if (!sheets.length) { busy('🧩 모아보기 그림 만드는 중…'); sheets = await ED.contactSheets('all'); busy(''); renderPanel(); }
+      const text = lmPrompt(); await copy(text);
+      const files = sheets.map((x, i) => new File([x.blob], `모아보기_${i + 1}.jpg`, { type: 'image/jpeg' }));
+      try { if (navigator.canShare && navigator.canShare({ files })) { await navigator.share({ files, text }); toast('📋 요청서도 복사해 뒀어요 · AI 앱 글 칸에 붙여넣기', 6000); return; } } catch (er) { if (er && er.name === 'AbortError') return; }
+      sheets.forEach((x, i) => giveFile(x.blob, `모아보기_${i + 1}.jpg`)); window.open(v === 'gem' ? 'https://gemini.google.com/app' : 'https://chatgpt.com/', '_blank', 'noopener');
+      return toast('📋 요청서를 복사했어요 · 받은 그림을 AI에 올리고 붙여넣기 하세요', 7000);
+    }
+    case 'lmcopy': await copy(lmPrompt()); return toast('📋 요청서를 복사했어요');
+    case 'lmpaste': { try { const t = await navigator.clipboard.readText(); const ta = $('lmAns'); if (ta) { ta.value = t; LMANS = t; } } catch (er) { toast('칸을 길게 눌러 붙여넣기 해 주세요'); } return; }
+    case 'lmapply': return lmApply(($('lmAns') || {}).value || LMANS);
     case 'lyrset': case 'lyrai': case 'lyron': case 'lyreven': case 'lyrshift': case 'lyrst': case 'lyrpos': case 'lyrtapgo': case 'lyrtap': case 'lyrtapback': case 'lyrtapstop': return lyrCmd(a, v);
     case 'alldur': P.clips.forEach(x => { if (x.kind === 'image') x.dur = c.dur; }); toast('모든 사진 길이를 맞췄어요'); return re();
     case 'goinfo': TAB = 'info'; renderTabs(); return renderPanel();

@@ -166,7 +166,7 @@ function drawFrame(x, W, H, t, opt) {
   if (!P || !P.clips.length) return;
   const A = clipAt(P, t); if (!A.c) return;
   const c = A.c, len = clipLen(c), still = !!opt.still, lt = still ? (c.kind === 'card' ? Math.max(A.lt, Math.min(1.8, len * .6)) : Math.max(A.lt, Math.min(.6, len * .4))) : A.lt, tr = eff(P, c, 'trans');
-  const prevLen = A.i > 0 ? clipLen(P.clips[A.i - 1]) : 0, td = Math.min(c.td || .6, len * .45, prevLen * .45);
+  const prevLen = A.i > 0 ? clipLen(P.clips[A.i - 1]) : 0, td = Math.min(P.transSpeed ? ({ fast: .35, normal: .6, slow: 1 }[P.transSpeed] || .6) : (c.td || .6), len * .45, prevLen * .45);
   if (!still && A.i > 0 && tr !== 'cut' && lt < td && (P.clips[A.i - 1].kind !== 'video' || srcEl(P.clips[A.i - 1], true))) {
     const a = tmp('la', W, H), b = tmp('lb', W, H), ax = a.getContext('2d'), bx = b.getContext('2d');
     drawLayer(ax, W, H, A.i - 1, prevLen, true); drawLayer(bx, W, H, A.i, lt, false);
@@ -179,6 +179,12 @@ function drawFrame(x, W, H, t, opt) {
     else if (tr === 'zoom') { x.drawImage(a, 0, 0); x.globalAlpha = e; const s = 1.35 - .35 * e; x.translate(W / 2, H / 2); x.scale(s, s); x.drawImage(b, -W / 2, -H / 2); }
     else if (tr === 'wipe') { x.drawImage(a, 0, 0); x.beginPath(); x.rect(0, 0, W * e, H); x.clip(); x.drawImage(b, 0, 0); }
     else if (tr === 'whoosh') { const s = Math.sin(p * Math.PI); x.translate(W / 2, H / 2); x.rotate((p < .5 ? -1 : 1) * .06 * s); x.scale(1 + .25 * s, 1 + .25 * s); x.translate(-W / 2, -H / 2); x.drawImage(p < .5 ? a : b, (p < .5 ? -e : 1 - e) * W * .4, 0); }
+    else if (tr === 'circle') { x.drawImage(a, 0, 0); x.beginPath(); x.arc(W / 2, H / 2, Math.hypot(W, H) / 2 * e + 1, 0, Math.PI * 2); x.clip(); x.drawImage(b, 0, 0); }
+    else if (tr === 'heart') { x.drawImage(a, 0, 0); heartPath(x, W / 2, H * .52, Math.max(W, H) * 2.2 * e + 2); x.clip(); x.drawImage(b, 0, 0); }
+    else if (tr === 'blur') { const q = p < .5 ? p * 2 : (1 - p) * 2; x.filter = `blur(${Math.round(q * Math.min(W, H) * .035)}px)`; x.drawImage(p < .5 ? a : b, 0, 0); x.filter = 'none'; }
+    else if (tr === 'spin') { x.drawImage(a, 0, 0); x.globalAlpha = Math.min(1, e * 1.4); x.translate(W / 2, H / 2); x.rotate((1 - e) * -1.2); const s = .35 + .65 * e; x.scale(s, s); x.drawImage(b, -W / 2, -H / 2); }
+    else if (tr === 'zoomout') { x.drawImage(b, 0, 0); x.globalAlpha = 1 - e; x.translate(W / 2, H / 2); const s = 1 + e * .6; x.scale(s, s); x.drawImage(a, -W / 2, -H / 2); }
+    else if (tr === 'glitch') { const src = p < .5 ? a : b, k = 1 - Math.abs(p * 2 - 1), n = 12, bh = H / n, f = Math.floor(p * 14); x.drawImage(src, 0, 0); for (let j = 0; j < n; j++) { const off = (h01(j, f) - .5) * W * .22 * k; if (Math.abs(off) > 1) x.drawImage(src, 0, j * bh, W, bh, off, j * bh, W, bh); } x.globalAlpha = .35 * k; x.globalCompositeOperation = 'lighter'; x.drawImage(src, W * .015 * k, 0); x.globalCompositeOperation = 'source-over'; }
     else x.drawImage(b, 0, 0);
     x.restore();
   } else drawLayer(x, W, H, A.i, lt, false);
@@ -193,6 +199,7 @@ function drawFrame(x, W, H, t, opt) {
   if (opt.hits) ED.hits = hits.filter(Boolean);
 }
 ED.drawFrame = drawFrame;
+function heartPath(x, cx, cy, s) { x.beginPath(); x.moveTo(cx, cy + s * .35); x.bezierCurveTo(cx - s * .05, cy + s * .3, cx - s * .55, cy + s * .05, cx - s * .5, cy - s * .2); x.bezierCurveTo(cx - s * .45, cy - s * .5, cx - s * .08, cy - s * .52, cx, cy - s * .22); x.bezierCurveTo(cx + s * .08, cy - s * .52, cx + s * .45, cy - s * .5, cx + s * .5, cy - s * .2); x.bezierCurveTo(cx + s * .55, cy + s * .05, cx + s * .05, cy + s * .3, cx, cy + s * .35); x.closePath(); }
 
 /* ═════════ 모자이크 ═════════ */
 function drawBlur(x, W, H, b, k) {
@@ -321,9 +328,11 @@ function drawWatermark(x, W, H, c) {
 
 /* ═════════ 제목 · 엔딩 카드 ═════════ */
 const CTA = { store: '지금 방문하세요!', menu: '오늘 맛보러 오세요!', product: '지금 만나 보세요!', realty: '문의 환영합니다', company: '감사합니다', me: '편하게 연락 주세요' };
-function firstMedia() { const P = ED.P; for (const c of P.clips) { if (c.kind === 'image') { const s = SRC.get(c.src); if (s) return s.img; } } for (const c of P.clips) if (c.kind === 'video') { const e = ED.thumbs && ED.thumbs.get(c.src); if (e) return e; } return null; }
-function cardBg(x, W, H, type, B) {
+function pinMedia(kind) { const P = ED.P, c = P.clips.find(x => x.pin === kind); if (!c) return null; const s = SRC.get(c.src); return s ? (s.img || (ED.thumbs && ED.thumbs.get(c.src)) || null) : null; }
+function firstMedia() { const P = ED.P, pm = pinMedia('first'); if (pm) return pm; for (const c of P.clips) { if (c.kind === 'image') { const s = SRC.get(c.src); if (s) return s.img; } } for (const c of P.clips) if (c.kind === 'video') { const e = ED.thumbs && ED.thumbs.get(c.src); if (e) return e; } return null; }
+function cardBg(x, W, H, type, B, isEnd) {
   const P = ED.P;
+  if (isEnd && !((type === 'store' || type === 'company') && B)) { const im = pinMedia('last'); if (im) { blurBg(x, im, im.width || im.videoWidth, im.height || im.videoHeight, W, H, 'none', 'ce'); x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(0, 0, W, H); return; } }
   if (type === 'memorial') { const gr = x.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#0b0b0f'); gr.addColorStop(1, '#1c1917'); x.fillStyle = gr; x.fillRect(0, 0, W, H); return; }
   if (type === 'credits') { x.fillStyle = '#0b1020'; x.fillRect(0, 0, W, H); return; }
   if ((type === 'store' || type === 'company') && B) { const col = B.color || '#174782', gr = x.createLinearGradient(0, 0, W, H); gr.addColorStop(0, col); gr.addColorStop(1, '#0f172a'); x.fillStyle = gr; x.fillRect(0, 0, W, H); return; }
@@ -343,7 +352,7 @@ function drawCard(x, W, H, c, lt, len) {
   const P = ED.P, I = P.info, B = brand(), pp = PURPOSE[P.purpose] || PURPOSE.meet, m = Math.min(W, H), wide = W / H > 1.2;
   const type = c.card === 'title' ? 'title' : (c.card || pp.end);
   const ff = P.capDef.font || (CAPS[P.capDef.style] || CAPS.basic).font;
-  x.save(); cardBg(x, W, H, type, B);
+  x.save(); cardBg(x, W, H, type, B, c.card !== 'title');
   const a = k => clamp((lt - k) / .6, 0, 1), out = clamp((len - lt) / .4, 0, 1);
   x.globalAlpha = out;
   if (type === 'title') {
@@ -464,7 +473,7 @@ async function mixAudio(sr) {
   }
   return await new Promise((res, rej) => { oc.oncomplete = e => res(e.renderedBuffer); const p = oc.startRendering(); if (p && p.then) p.then(res, rej); });
 }
-ED.mixAudio = mixAudio;
+ED.mixAudio = mixAudio; ED.musicBuf = musicBuf;
 
 /* ═════════ MP4 만들기 ═════════ */
 async function pickV(W, H, fps, hq) {

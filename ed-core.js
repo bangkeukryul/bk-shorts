@@ -64,7 +64,10 @@ const COLORS = ['#ffffff', '#ffe14d', '#ff4d6d', '#ff8fb1', '#7dd3fc', '#86efac'
 /* ═════════ 색감 · 효과 · 전환 ═════════ */
 const FILTERS = { none: ['원본', 'none'], warm: ['따뜻하게', 'sepia(.22) saturate(1.18) brightness(1.04)'], old: ['옛날 사진', 'sepia(.6) contrast(.94) brightness(1.03) saturate(.75)'], bw: ['흑백', 'grayscale(1) contrast(1.12)'], vivid: ['선명하게', 'saturate(1.45) contrast(1.08)'], cool: ['시원하게', 'saturate(1.1) hue-rotate(-12deg) brightness(1.04)'], film: ['필름 감성', 'contrast(1.12) saturate(.82) sepia(.18)'], soft: ['뽀얗게', 'brightness(1.09) contrast(.9) saturate(.95)'], bright: ['밝게', 'brightness(1.18) contrast(1.02)'] };
 const EFX = { punch: '💥 확 줌인', shake: '🫨 흔들림', flash: '⚡ 번쩍', vignette: '🌑 가장자리 어둡게', grain: '🎞 옛날 필름', mirror: '↔️ 좌우 뒤집기', heart: '💗 하트 날리기', confetti: '🎊 꽃가루', snow: '❄️ 눈 내림', petal: '🌸 꽃잎' };
-const TRANS = { cut: '바로', fade: '스르르', black: '검은 화면', white: '하얀 번쩍', slide: '옆으로 밀기', up: '위로 밀기', zoom: '줌 확대', wipe: '닦아내기', whoosh: '휙 (흔들며)' };
+const TRANS = { cut: '바로', fade: '스르르', black: '검은 화면', white: '하얀 번쩍', slide: '옆으로 밀기', up: '위로 밀기', zoom: '줌 확대', zoomout: '줌 축소', wipe: '닦아내기', whoosh: '휙 (흔들며)', circle: '동그랗게 열기', blur: '흐릿하게', spin: '빙글', glitch: '지지직', heart: '하트로 열기' };
+/* 🎲 골고루 섞기: 영상 종류마다 어울리는 전환들을 돌아가며 (같은 것이 연달아 나오지 않게) */
+const TPAL = { meet: ['zoom', 'whoosh', 'slide', 'white', 'glitch', 'spin', 'circle'], team: ['zoom', 'whoosh', 'white', 'slide', 'spin', 'circle', 'glitch'], store: ['zoom', 'slide', 'whoosh', 'wipe', 'circle', 'white'], menu: ['zoom', 'slide', 'circle', 'wipe', 'white'], product: ['slide', 'zoom', 'wipe', 'circle', 'up'], memory: ['fade', 'blur', 'black', 'circle', 'zoomout'], church: ['fade', 'blur', 'circle', 'zoomout', 'black'], family: ['heart', 'fade', 'slide', 'zoom', 'circle'], kids: ['heart', 'slide', 'circle', 'zoom', 'spin'], travel: ['whoosh', 'slide', 'blur', 'zoomout', 'wipe'], def: ['fade', 'slide', 'zoom', 'wipe', 'circle', 'blur'] };
+function mixTrans(P, c) { const pal = TPAL[P.purpose] || TPAL.def, i = Math.max(0, P.clips.indexOf(c)), pick = j => pal[(j * 5 + 2) % pal.length]; let t = pick(i); const pv = i > 0 ? P.clips[i - 1] : null, pt = pv ? (pv.trans !== 'auto' ? pv.trans : pick(i - 1)) : ''; if (t === pt) t = pal[((i * 5 + 3) % pal.length)]; return t; }
 const KB = { auto: '자동', none: '움직임 없음', in: '천천히 확대', out: '천천히 축소', left: '왼쪽으로', right: '오른쪽으로' };
 
 /* ═════════ 스티커 ═════════ */
@@ -205,7 +208,7 @@ function eff(P, c, key) {
   const pp = PURPOSE[P.purpose] || PURPOSE.meet;
   if (key === 'fit') return c.fit === 'auto' ? 'blur' : c.fit;
   if (key === 'filter') return c.filter === 'auto' ? pp.flt : c.filter;
-  if (key === 'trans') return c.trans === 'auto' ? pp.tr : c.trans;
+  if (key === 'trans') { if (c.trans !== 'auto') return c.trans; const m = P.transMode || 'one'; return m === 'cut' ? 'cut' : m === 'mix' ? mixTrans(P, c) : pp.tr; }
   return c[key];
 }
 ED.eff = eff;
