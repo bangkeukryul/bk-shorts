@@ -295,7 +295,7 @@ function pEdit(c) {
     if (c.kind !== 'card') h += `<div class="grp"><h3>🖼 화면에 맞추기</h3>${chips('fit', { auto: '자동 (흐린 배경)', cover: '꽉 채우기', contain: '전체 보이기 (검은 배경)' }, c.fit)}<button type="button" data-a="focus" class="sec">📍 ${FOCUS ? '화면을 눌러 주세요…' : '보일 중심 맞추기 (얼굴이 잘릴 때)'}</button></div>`;
     h += `<div class="grp"><h3>🔀 넘어가는 효과 <small>이 장면이 시작될 때</small></h3>${chips('trans', Object.assign({ auto: '추천' }, TRANS), c.trans)}<button type="button" data-a="alltrans" class="sec">모든 장면에 같게</button></div>`;
   }
-  h += `<div class="grp"><h3>🗂 전체</h3><div class="btns2"><label class="btnf">＋ 사진 · 동영상 더<input type="file" data-a="addf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 내 파일에서 더<input type="file" data-a="addf" multiple hidden></label><button type="button" data-a="sortdate">🗓 찍은 날짜 순서로</button></div></div>`;
+  h += `<div class="grp"><h3>🗂 전체</h3><div class="btns2"><label class="btnf">＋ 사진 · 동영상 더<input type="file" data-a="addf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 내 파일에서 더<input type="file" data-a="addf" multiple hidden></label></div><p class="hint" style="margin:6px 0 0">📁 「작업 선택」이 나오면 <b>파일</b>을 고르고 → 첫 사진을 <b>꾹(길게) 누르면</b> 여러 장을 고를 수 있어요 → 나머지 톡톡 → 오른쪽 위 <b>「선택」</b></p><div class="btns2"><button type="button" data-a="sortdate">🗓 찍은 날짜 순서로</button></div></div>`;
   return h;
 }
 /* ── 💬 자막 ── */
@@ -347,12 +347,117 @@ function pFx(c) {
     <p class="hint">재생바를 원하는 곳에 두고 누르세요. 소리는 프로그램이 직접 만들어서 저작권 걱정이 없어요.</p></div>`;
   return h;
 }
+/* ── 🎵 노래 끝까지: 사진 시간 자동 맞추기 ──
+   사진 한 장은 3.5~5초가 보기 좋아요 → 노래 1분에 사진 12~17장.
+   · ⏱ 사진 시간 늘리기: 지금 사진만으로 노래 길이를 나눔 (한 장이 너무 길어지면 반복을 권함)
+   · 🔁 사진 한 번 더 보여 주기: 한 장 4.5초가 되게, 모자란 만큼 사진을 섞어서 뒤쪽에 한 번 더 (같은 사진이 붙어 나오지 않게) */
+function musFile() { const M = P.music; if (M.kind !== 'file' || !M.fileId) return null; const s = P.srcs.find(x => x.id === M.fileId); return s && s.dur ? s : null; }
+function musFitInfo() {
+  const mf = musFile(); if (!mf) return null;
+  const imgs = P.clips.filter(x => x.kind === 'image'), fixed = P.clips.filter(x => x.kind !== 'image').reduce((a, x) => a + clipLen(x), 0);
+  const L = mf.dur, avail = L - fixed, n = imgs.length, per = n ? avail / n : 0, reps = imgs.filter(x => x.rep).length;
+  return { L, avail, n, per, reps, lo: Math.max(1, Math.round(avail / 5)), hi: Math.max(1, Math.round(avail / 3.5)), total: timeline(P).total };
+}
+function musFitBox() {
+  const f = musFitInfo(); if (!f) return P.music.kind === 'file' ? '' : '<p class="hint">💡 기본 음악은 영상 길이에 맞춰 자동으로 연주돼요. <b>내 음악(MP3)</b>을 넣으면 「노래 끝까지 자동 맞추기」가 나와요.</p>';
+  const orig = f.n - f.reps, per = Math.max(0, f.per), slow = per > 6, few = per > 12, many = f.avail / Math.max(1, f.n) < 1.5;
+  return `<div class="grp" style="background:#fff8e6;border:2px solid #f2c14e;border-radius:14px;padding:10px 12px;margin-top:10px"><h3 style="margin-top:0">🎵 노래 끝까지 — 사진 시간 자동 맞추기</h3>
+    <p>노래 <b>${fmtS(f.L)}</b> · 지금 영상 <b>${fmtS(f.total)}</b> · 사진 <b>${orig}장</b>${f.reps ? ` (+ 한 번 더 ${f.reps}장)` : ''}</p>
+    <p class="hint">📌 이 노래에는 사진 <b>${f.lo}~${f.hi}장</b>이 딱 좋아요 (한 장 3.5~5초). 노래 1분에 사진 12~17장 정도예요.</p>
+    <div class="btns2"><button type="button" data-a="mfit" data-v="stretch" class="pri">⏱ 지금 사진으로 맞추기<small style="display:block;font-weight:600">한 장 ${per.toFixed(1)}초${few ? ' → 최대 12초' : ''}</small></button><button type="button" data-a="mfit" data-v="repeat">🔁 사진 한 번 더 섞어서<small style="display:block;font-weight:600">한 장 4.5초쯤 · 같은 사진 최대 2번 더</small></button></div>
+    ${many ? '<p class="hint" style="color:#b91c1c">⚠️ 사진이 노래보다 많아요. 맞추면 한 장이 아주 짧아져요 (사진을 줄이거나 더 긴 노래로).</p>' : slow ? '<p class="hint">💡 한 장이 6초가 넘으면 지루할 수 있어요 → <b>🔁 섞어서 한 번 더</b>나 사진을 더 넣는 걸 추천해요. 사진 움직임(천천히 확대)도 켜져요.</p>' : ''}
+    ${f.reps ? '<button type="button" data-a="mfit" data-v="unrep" class="sec">↩ 한 번 더 넣은 사진 빼기</button>' : ''}</div>`;
+}
+function musFit(mode) {
+  const f = musFitInfo(); if (!f) return toast('먼저 📁 내 음악 파일을 넣어 주세요');
+  if (mode === 'unrep' || mode === 'repeat') { P.clips = P.clips.filter(x => !x.rep); }
+  let imgs = P.clips.filter(x => x.kind === 'image'); if (!imgs.length) return toast('사진이 없어요');
+  const fixed = P.clips.filter(x => x.kind !== 'image').reduce((a, x) => a + clipLen(x), 0), avail = f.L - fixed;
+  if (mode === 'repeat') {
+    const want = Math.max(imgs.length, Math.round(avail / 4.5)), extra = Math.min(want - imgs.length, imgs.length * 2); /* 같은 사진은 최대 2번 더 */
+    if (extra > 0) {
+      const sh = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+      const add = []; let pool = [], last = imgs[imgs.length - 1];
+      while (add.length < extra) { if (!pool.length) pool = sh(imgs); let k = pool.findIndex(x => x.src !== (add.length ? add[add.length - 1].src : last.src)); if (k < 0) k = 0; const o = pool.splice(k, 1)[0], d = JSON.parse(JSON.stringify(o)); d.id = uid('c'); d.rep = 1; d.cap = { t: '' }; d.sfx = []; d.vo = null; d.trans = 'auto'; add.push(d); }
+      let pos = P.clips.length; const lc = P.clips[pos - 1]; if (lc && lc.kind === 'card' && lc.card !== 'title') pos--;
+      P.clips.splice(pos, 0, ...add); imgs = P.clips.filter(x => x.kind === 'image');
+    }
+  }
+  if (mode === 'unrep') { commit(); renderPanel(); return toast('↩ 한 번 더 넣은 사진을 뺐어요'); }
+  const per = Math.round(Math.min(12, Math.max(1, avail / imgs.length)) * 10) / 10;
+  imgs.forEach(x => { x.dur = per; if (per > 5 && (!x.kb || x.kb === 'auto')) x.kb = 'auto'; });
+  if (!P.music.fade || P.music.fade < 2.5) P.music.fade = 5;
+  commit(); makeThumbs(); renderPanel();
+  const tot = timeline(P).total;
+  toast(per >= 12 && tot < f.L - 1 ? `사진이 모자라 ${fmtS(tot)}까지만 채웠어요 · 🔁 섞어서 한 번 더를 눌러 보세요` : `🎵 노래 끝까지! 사진 ${imgs.length}장 × ${per}초 = ${fmtS(tot)}`, 4500);
+}
+/* ── 🎤 노래 가사 자막 ──
+   ① 가사 붙여넣기 (시간 없이도 OK · [00:15] 같은 시간이 있으면 그대로 · .lrc · .srt 도 OK)
+   ② 🤖 Gemini에 MP3를 올려 가사와 시간을 받아 오기 ③ 👆 노래 들으며 줄마다 톡톡 눌러 시간 맞추기 ④ ↔ 고르게 나누기 */
+let LYT = -1;   // 톡톡 맞추기 중인 줄 (-1 = 아님)
+function lyrParse(text) {
+  const raw = String(text || '').replace(/```[a-z]*/gi, '');
+  const toS = (h, m, s, f) => (+h || 0) * 3600 + (+m) * 60 + (+s) + (f ? +('0.' + f) : 0);
+  if (/-->/.test(raw)) {
+    const out = []; raw.split(/\r?\n\s*\r?\n/).forEach(b => { const ls = b.split(/\r?\n/).map(s => s.trim()).filter(Boolean), k = ls.findIndex(l => /-->/.test(l)); if (k < 0) return; const m = ls[k].match(/(\d+):(\d+):(\d+)[,.](\d+)/); if (!m) return; const tx = ls.slice(k + 1).join(' ').trim(); if (tx) out.push({ t: toS(m[1], m[2], m[3], m[4]), text: tx }); });
+    return { timed: out.length > 0, lines: out };
+  }
+  const out = []; let timed = 0;
+  raw.split(/\r?\n/).forEach(l => {
+    l = l.trim().replace(/^[-*•]\s*/, ''); if (!l) return;
+    const m = l.match(/^\[?(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?\]?\s*[-–:]?\s*(.*)$/);
+    if (m) { const tx = m[4].replace(/^\[?\d{1,2}:\d{2}(?:[.:]\d{1,3})?\]?\s*/, '').trim(); if (tx && !/^[\[(].*[\])]$/.test(tx)) { out.push({ t: toS(0, m[1], m[2], m[3]), text: tx }); timed++; } return; }
+    if (/^[\[(].*[\])]$/.test(l)) return;   // [Verse] [후렴] (간주) 같은 표시는 빼기
+    out.push({ t: null, text: l });
+  });
+  return { timed: timed > 0 && timed >= out.length * .6, lines: out.filter(x => x.t != null || timed === 0) };
+}
+function lyrSpread(lines, L) { const s0 = Math.min(10, L * .06), e = L - Math.min(8, L * .05), st = (e - s0) / Math.max(1, lines.length); lines.forEach((x, i) => { x.t = Math.round((s0 + i * st) * 10) / 10; }); }
+function lyrBox() {
+  const mf = musFile(); if (!mf) return '';
+  const Ly = P.lyrics || {}, n = (Ly.lines || []).length, on = n && Ly.on;
+  let h = `<div class="grp" style="background:#f5f3ff;border:2px solid #c4b5fd;border-radius:14px;padding:10px 12px;margin-top:10px"><h3 style="margin-top:0">🎤 노래 가사 자막 <small>노래에 맞춰 한 줄씩 나와요</small></h3>`;
+  if (LYT >= 0) {
+    const cur = Ly.lines[LYT];
+    h += `<p><b>👆 톡톡 맞추기 중</b> — 노래를 듣다가 <b>이 줄을 부르기 시작할 때</b> 큰 버튼을 누르세요. (${LYT + 1} / ${n})</p><button type="button" data-a="lyrtap" class="pri" style="width:100%;padding:18px 10px;font-size:1.1rem">▶ 「${esc(cur ? cur.text.slice(0, 22) : '')}」 시작!</button><div class="btns2" style="margin-top:8px"><button type="button" data-a="lyrtapback" class="sec">↶ 한 줄 전으로</button><button type="button" data-a="lyrtapstop" class="sec">■ 그만 (나머지는 고르게)</button></div></div>`;
+    return h;
+  }
+  h += `<textarea data-a="lyr" rows="5" placeholder="가사를 붙여넣으세요 (한 줄에 한 마디)\n시간이 있으면 그대로 써요: [00:15] 첫 줄 가사\n[Verse] · [후렴] 같은 표시는 자동으로 빠져요">${esc(Ly.raw || '')}</textarea>
+    <div class="btns2"><button type="button" data-a="lyrset" class="pri">✅ 가사 넣기</button><button type="button" data-a="lyrai">🤖 Gemini로 가사 · 시간 받기</button></div>
+    <p class="hint">🤖 버튼을 누르면 요청 글이 복사되고 Gemini가 열려요 → <b>＋로 이 MP3 파일을 올리고</b> 붙여넣기 → 나온 가사를 통째로 복사해서 위 칸에 붙여넣고 ✅. 가사를 이미 알면(수노 등) 그 가사를 같이 붙여넣으면 더 정확해요.</p>`;
+  if (n) {
+    h += `<p>✅ 가사 <b>${n}줄</b> · ${Ly.timed ? '시간 맞춤' : '고르게 나눔'}</p>
+      <div class="chips"><button type="button" data-a="lyron" data-v="1"${pressed(!!on, true)}>🎤 자막 켜기</button><button type="button" data-a="lyron" data-v="0"${pressed(!!on, false)}>끄기</button></div>
+      <h4>시간 맞추기</h4><div class="btns2"><button type="button" data-a="lyrtapgo" class="pri">👆 노래 들으며 톡톡 맞추기</button><button type="button" data-a="lyreven">↔ 고르게 나누기</button></div>
+      <div class="chips"><button type="button" data-a="lyrshift" data-v="-0.5">전체 −0.5초 (빨리)</button><button type="button" data-a="lyrshift" data-v="0.5">전체 +0.5초 (늦게)</button></div>
+      <h4>모양</h4><div class="chips">${[['karaoke', '🎤 노래방 (노랗게 채워짐)'], ['white', '흰 글씨'], ['band', '검은 띠']].map(([k, nm]) => `<button type="button" data-a="lyrst" data-v="${k}"${pressed(Ly.style || 'karaoke', k)}>${nm}</button>`).join('')}</div>
+      <div class="chips">${[['bottom', '⬇ 아래'], ['mid', '가운데'], ['top', '⬆ 위']].map(([k, nm]) => `<button type="button" data-a="lyrpos" data-v="${k}"${pressed(Ly.pos || 'bottom', k)}>${nm}</button>`).join('')}</div>
+      <ul class="lst" style="max-height:180px;overflow:auto">${Ly.lines.map(x => `<li>${fmtS(x.t)} · ${esc(x.text)}</li>`).join('')}</ul>
+      <p class="hint">💡 영상이 노래보다 짧으면 뒷부분 가사가 안 나와요 → 위의 「노래 끝까지 맞추기」를 먼저 해 주세요. 장면 자막과 겹치면 가사를 ⬆ 위로 옮기세요.</p>`;
+  }
+  return h + '</div>';
+}
+function lyrCmd(a, v) {
+  const mf = musFile(); if (!mf) return toast('먼저 📁 내 음악 파일을 넣어 주세요');
+  P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; const Ly = P.lyrics;
+  if (a === 'lyrset') { const r = lyrParse(Ly.raw); if (!r.lines.length) return toast('가사를 먼저 붙여넣어 주세요'); Ly.lines = r.lines; Ly.timed = r.timed; if (!r.timed) lyrSpread(Ly.lines, mf.dur); Ly.lines.sort((p, q) => p.t - q.t); Ly.on = 1; commit(); renderPanel(); return toast(r.timed ? `🎤 가사 ${Ly.lines.length}줄을 시간에 맞춰 넣었어요 · ▶로 확인해 보세요` : `🎤 가사 ${Ly.lines.length}줄을 고르게 나눴어요 · 「👆 톡톡 맞추기」로 정확히 맞출 수 있어요`, 4500); }
+  if (a === 'lyrai') { const t = '첨부한 노래(MP3)의 가사를 들리는 대로 받아 적어 주세요.\n- 한 줄씩 나눠서, 줄마다 맨 앞에 그 줄을 부르기 시작하는 시간을 [분:초] 형식으로 붙여 주세요. 예: [00:15] 첫 줄 가사\n- 반주만 나오는 부분(간주)은 쓰지 마세요.\n- 한 줄은 화면 자막에 맞게 15자 안팎으로 짧게 나눠 주세요.\n- 다른 설명 없이 시간과 가사만 써 주세요.' + (Ly.raw && Ly.raw.trim() ? '\n\n아래는 원래 가사예요. 이 글자 그대로 쓰고 시간만 맞춰 주세요:\n' + Ly.raw.trim() : ''); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('📋 복사했어요 · Gemini에서 ＋로 MP3를 올리고 붙여넣으세요', 4500)).catch(() => {}); setTimeout(() => g.open('https://gemini.google.com/app', '_blank'), 300); return; }
+  if (a === 'lyron') { Ly.on = +v; commit(); renderPanel(); return; }
+  if (a === 'lyreven') { lyrSpread(Ly.lines, mf.dur); Ly.timed = 0; commit(); renderPanel(); return toast('↔ 고르게 나눴어요'); }
+  if (a === 'lyrshift') { Ly.lines.forEach(x => { x.t = Math.max(0, Math.round((x.t + +v) * 10) / 10); }); commit(); renderPanel(); return; }
+  if (a === 'lyrst') { Ly.style = v; commit(); renderPanel(); return; }
+  if (a === 'lyrpos') { Ly.pos = v; commit(); renderPanel(); return; }
+  if (a === 'lyrtapgo') { if (timeline(P).total < mf.dur - 3) toast('💡 영상이 노래보다 짧아요 → 「노래 끝까지 맞추기」를 먼저 하면 끝까지 맞출 수 있어요', 4500); Ly.on = 1; LYT = 0; if (PLAY) pause(); T = 0; renderPanel(); play(); return; }
+  if (a === 'lyrtap') { if (LYT < 0) return; Ly.lines[LYT].t = Math.round(T * 10) / 10; LYT++; if (LYT >= Ly.lines.length) { LYT = -1; Ly.timed = 1; commit(); renderPanel(); return toast('✅ 가사 시간을 다 맞췄어요 · ▶로 확인해 보세요'); } renderPanel(); return; }
+  if (a === 'lyrtapback') { if (LYT > 0) { LYT--; T = Math.max(0, Ly.lines[LYT].t - 2); if (PLAY) { pause(); play(); } } renderPanel(); return; }
+  if (a === 'lyrtapstop') { if (LYT > 0) { const done = LYT, last = Ly.lines[done - 1].t, e = mf.dur - Math.min(8, mf.dur * .05), rest = Ly.lines.length - done, st = (e - last) / Math.max(1, rest + 1); for (let i = done; i < Ly.lines.length; i++) Ly.lines[i].t = Math.round((last + (i - done + 1) * st) * 10) / 10; } LYT = -1; if (PLAY) pause(); commit(); renderPanel(); return toast('■ 그만했어요 · 남은 줄은 고르게 나눴어요'); }
+}
 /* ── 🎵 소리 ── */
 function pSnd(c) {
   const M = P.music, pp = PURPOSE[P.purpose], L = (g.BKMUSIC && g.BKMUSIC.LIST) || [];
   let h = `<div class="grp"><h3>🎵 배경 음악</h3><div class="chips"><button type="button" data-a="mus" data-v="auto"${pressed(M.kind, 'auto')}>✨ 추천 (${esc(g.BKMUSIC ? g.BKMUSIC.label(pp.mus) : pp.mus)})</button><button type="button" data-a="mus" data-v="none"${pressed(M.kind, 'none')}>🔇 음악 없음</button></div>
     ${L.map(([gn, items]) => `<h4>${esc(gn)}</h4><div class="chips">${items.map(([k, n]) => `<button type="button" data-a="mus" data-v="${k}"${pressed(M.kind, k)}>${esc(n)}</button>`).join('')}</div>`).join('')}
-    <h4>내 음악</h4><label class="btnf ${M.kind === 'file' ? 'on' : ''}">📁 내 음악 파일 고르기 ${M.kind === 'file' ? '(넣음)' : ''}<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label>
+    <h4>내 음악</h4><label class="btnf ${M.kind === 'file' ? 'on' : ''}">📁 내 음악 파일 고르기 ${M.kind === 'file' ? '(넣음)' : ''}<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label>${musFitBox()}${lyrBox()}
     <p class="hint">홍보 영상에는 <b>저작권 걱정 없는 음악</b>만 쓰세요. 기본 음악은 프로그램이 직접 연주해서 괜찮아요.</p>
     ${range('mvol', M.vol, 0, 1.2, .05, '음악 크기 %')}${chips('duck', [['1', '🗣 말소리 나올 때 음악 작게'], ['0', '항상 같은 크기']], M.duck ? 1 : 0)}
     <h4>끝날 때 음악 줄이기</h4>${chips('mfade', [['0', '바로 끝'], ['2.5', '2.5초'], ['5', '5초']], M.fade)}</div>
@@ -511,6 +616,7 @@ $('panel').addEventListener('input', e => {
   if (a === 'ss' && c && SELOV) { c.stk[SELOV.k].s = +v; drawNow(); return; } if (a === 'sv' && c && SELOV) { c.stk[SELOV.k].v = v; drawNow(); return; }
   if ((a === 'bw' || a === 'bh') && c && SELOV) { c.blur[SELOV.k][a === 'bw' ? 'w' : 'h'] = +v; drawNow(); return; }
   if (a === 'it') { P.info[el.dataset.v] = v; drawNow(); return; }
+  if (a === 'lyr') { P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; P.lyrics.raw = v; return; }
   if (a === 'bf') { const L = ED.brands(), b = L.find(x => x.id === P.info.brandId); if (b) { b[el.dataset.v] = v; ED.saveBrands(L); drawNow(); } return; }
 });
 $('panel').addEventListener('change', async e => {
@@ -519,7 +625,7 @@ $('panel').addEventListener('change', async e => {
   if (el.type === 'file') {
     const fs = Array.from(el.files || []); el.value = ''; if (!fs.length) return;
     if (a === 'addf') { const n = await addFiles(fs); commit(); renderPanel(); toast(`＋ ${n}개를 넣었어요`); }
-    if (a === 'musf') { const f = fs[0], id = uid('s'), meta = { id, code: 'A' + (P.nA++), kind: 'audio', name: f.name }; busy('음악 여는 중…'); const s = await ED.loadSource(meta, f); busy(''); if (!s.buf) return toast('음악 파일을 열 수 없어요 (MP3 · M4A 권장)'); meta.dur = s.dur; P.srcs.push(meta); try { await IDB.put('f', id, f); } catch (er) { /* 공간 */ } P.music.kind = 'file'; P.music.fileId = id; commit(); renderPanel(); toast('🎵 내 음악을 넣었어요'); }
+    if (a === 'musf') { const f = fs[0], id = uid('s'), meta = { id, code: 'A' + (P.nA++), kind: 'audio', name: f.name }; busy('음악 여는 중…'); const s = await ED.loadSource(meta, f); busy(''); if (!s.buf) return toast('음악 파일을 열 수 없어요 (MP3 · M4A 권장)'); meta.dur = s.dur; P.srcs.push(meta); try { await IDB.put('f', id, f); } catch (er) { /* 공간 */ } P.music.kind = 'file'; P.music.fileId = id; commit(); renderPanel(); toast(timeline(P).total < s.dur - 3 ? '🎵 내 음악을 넣었어요 · 노래가 영상보다 길어요 → 아래 「노래 끝까지 자동 맞추기」를 눌러 보세요' : '🎵 내 음악을 넣었어요', 4500); }
     if (a === 'logo') { const f = fs[0], url = URL.createObjectURL(f), im = await ENG.loadImage(url), k = Math.min(1, 360 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); const L = ED.brands(), b = L.find(x => x.id === P.info.brandId); if (b) { b.logo = cv.toDataURL('image/png'); ED.saveBrands(L); } commit(); renderPanel(); }
   }
 });
@@ -545,6 +651,8 @@ $('panel').addEventListener('click', async e => {
     case 'speed': if (c) { c.speed = +v; return re(); } return;
     case 'mute': if (c) { c.mute = +v; return re(); } return;
     case 'hold': if (c) { c.hold = +v; return re(); } return;
+    case 'mfit': return musFit(v);
+    case 'lyrset': case 'lyrai': case 'lyron': case 'lyreven': case 'lyrshift': case 'lyrst': case 'lyrpos': case 'lyrtapgo': case 'lyrtap': case 'lyrtapback': case 'lyrtapstop': return lyrCmd(a, v);
     case 'alldur': P.clips.forEach(x => { if (x.kind === 'image') x.dur = c.dur; }); toast('모든 사진 길이를 맞췄어요'); return re();
     case 'goinfo': TAB = 'info'; renderTabs(); return renderPanel();
     case 'fit': if (c) { c.fit = v; return re(); } return;

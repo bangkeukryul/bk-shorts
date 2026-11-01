@@ -188,6 +188,7 @@ function drawFrame(x, W, H, t, opt) {
     for (let k = 0; k < (c.stk || []).length; k++) hits.push(drawSticker(x, W, H, c.stk[k], still ? Math.max(lt, .5) : lt, len, k));
   }
   const cb = drawCaption(x, W, H, c, lt, len, still); if (cb) hits.push(cb);
+  drawLyrics(x, W, H, t);
   drawWatermark(x, W, H, c);
   if (opt.hits) ED.hits = hits.filter(Boolean);
 }
@@ -244,6 +245,33 @@ function drawCaption(x, W, H, c, lt, len, force) {
   return { type: 'cap', l: cxp - bw / 2, t: cyp - bh / 2, w: bw, h: bh };
 }
 ED.drawCaption = drawCaption;
+
+/* ═════════ 🎤 노래 가사 자막 (노래 시간에 맞춰 한 줄씩) ═════════ */
+function lyricAt(Ly, t) {
+  const L = Ly.lines; let i = -1; for (let k = 0; k < L.length; k++) { if (t + 1e-6 >= L[k].t) i = k; else break; }
+  if (i < 0) return null; const s = L[i].t, e = Math.min(L[i + 1] ? L[i + 1].t : s + 6, s + 9);
+  return t < e ? { i, s, e, text: L[i].text } : null;
+}
+function drawLyrics(x, W, H, t) {
+  const P = ED.P, Ly = P && P.lyrics; if (!Ly || !Ly.on || !Ly.lines || !Ly.lines.length) return;
+  const A = lyricAt(Ly, t); if (!A || !A.text) return;
+  const m = Math.min(W, H), px = m * .062 * (Ly.size || 1), st = Ly.style || 'karaoke', font = Ly.font || (st === 'karaoke' ? 'blackhan' : 'noto');
+  x.save(); x.font = fspec(font, px); x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round'; x.miterLimit = 2;
+  const lines = wrap(x, A.text, W * .88 - px), lh = px * 1.3, cy = (Ly.pos === 'top' ? .13 : Ly.pos === 'mid' ? .5 : .9) * H - (Ly.pos === 'top' ? 0 : (lines.length - 1) * lh / 2);
+  const a = Math.min(1, (t - A.s) / .22, (A.e - t) / .22); x.globalAlpha = Math.max(0, a);
+  const ws = lines.map(l => x.measureText(l).width), bw = Math.max(...ws) + px * 1.1, bh = lines.length * lh + px * .5;
+  if (st === 'band') { x.fillStyle = 'rgba(0,0,0,.55)'; rr(x, W / 2 - bw / 2, cy - lh / 2 - px * .25, bw, bh, px * .3); x.fill(); }
+  const prog = Math.min(1, (t - A.s) / Math.max(.5, (A.e - A.s) * .92)), tot = ws.reduce((p, w) => p + w, 0);
+  let done = prog * tot;
+  lines.forEach((l, i) => {
+    const y = cy + i * lh, w = ws[i], x0 = W / 2 - w / 2;
+    if (st !== 'band') { x.strokeStyle = 'rgba(0,0,0,.85)'; x.lineWidth = px * .2; x.strokeText(l, W / 2, y); }
+    x.fillStyle = '#ffffff'; x.fillText(l, W / 2, y);
+    if (st === 'karaoke') { const fw = Math.max(0, Math.min(w, done)); done -= w; if (fw > 0) { x.save(); x.beginPath(); x.rect(x0 - 4, y - lh / 2, fw + 4, lh); x.clip(); x.fillStyle = '#ffe14d'; x.strokeStyle = '#7a1f2b'; x.lineWidth = px * .2; x.strokeText(l, W / 2, y); x.fillText(l, W / 2, y); x.restore(); } }
+  });
+  x.restore();
+}
+ED.lyricAt = lyricAt;
 
 /* ═════════ 스티커 ═════════ */
 function starPath(x, r1, r2, n) { x.beginPath(); for (let i = 0; i < n * 2; i++) { const r = i % 2 ? r2 : r1, a = i * Math.PI / n - Math.PI / 2; x.lineTo(Math.cos(a) * r, Math.sin(a) * r); } x.closePath(); }
