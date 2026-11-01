@@ -312,7 +312,7 @@ function pCap(c) {
     <h4>색</h4><div class="colors">${['', ...COLORS].map(v => `<button type="button" data-a="col" data-v="${v}" style="${v ? 'background:' + v : ''}"${pressed(cd.color || '', v)}>${v ? '' : '기본'}</button>`).join('')}</div>
     ${range('size', cd.size || 1, .6, 1.8, .05, '크기')}
     <h4>나타나는 효과</h4>${chips('anim', Object.assign({ '': '모양에 맞게' }, CAP_ANIMS), cd.anim || '')}</div>
-   <div class="grp"><h3>📋 한 번에 쓰기</h3><p class="hint">한 줄에 한 장면씩 (오프닝 · 엔딩 카드는 빼고 순서대로 들어가요)</p><textarea id="capAll" rows="4" placeholder="첫 장면 자막&#10;두 번째 장면 자막">${esc(P.clips.filter(x => x.kind !== 'card').map(x => (x.cap.t || '').replace(/\n/g, ' / ')).join('\n'))}</textarea><button type="button" data-a="capall" class="pri">✅ 순서대로 넣기</button></div>`;
+   <div class="grp"><h3>📋 한 번에 쓰기</h3><p class="hint">한 줄에 한 장면씩 (오프닝 · 엔딩 카드는 빼고 순서대로 들어가요)</p><textarea id="capAll" rows="4" placeholder="첫 장면 자막&#10;두 번째 장면 자막">${esc(P.clips.filter(x => x.kind !== 'card').map(x => (x.cap.t || '').replace(/\n/g, ' / ')).join('\n'))}</textarea><button type="button" data-a="capall" class="pri">✅ 순서대로 넣기</button><p class="hint">✏️ 칸의 글을 고치거나 지운 다음에는 <b>꼭 ✅ 순서대로 넣기</b>를 눌러야 화면에 바뀌어요.</p><button type="button" data-a="capclr" class="dg">🗑 장면 자막 전부 지우기</button></div>`;
   return h;
 }
 /* ── 😀 스티커 ── */
@@ -431,6 +431,7 @@ function lyrBox() {
       <h4>시간 맞추기</h4><div class="btns2"><button type="button" data-a="lyrtapgo" class="pri">👆 노래 들으며 톡톡 맞추기</button><button type="button" data-a="lyreven">↔ 고르게 나누기</button></div>
       <div class="chips"><button type="button" data-a="lyrshift" data-v="-0.5">전체 −0.5초 (빨리)</button><button type="button" data-a="lyrshift" data-v="0.5">전체 +0.5초 (늦게)</button></div>
       <h4>모양</h4><div class="chips">${[['karaoke', '🎤 노래방 (노랗게 채워짐)'], ['white', '흰 글씨'], ['band', '검은 띠']].map(([k, nm]) => `<button type="button" data-a="lyrst" data-v="${k}"${pressed(Ly.style || 'karaoke', k)}>${nm}</button>`).join('')}</div>
+      <h4>가사 글씨 크기</h4>${range('lyrsz', Ly.size || 1.3, .6, 2.5, .05, '크기')}
       <div class="chips">${[['bottom', '⬇ 아래'], ['mid', '가운데'], ['top', '⬆ 위']].map(([k, nm]) => `<button type="button" data-a="lyrpos" data-v="${k}"${pressed(Ly.pos || 'bottom', k)}>${nm}</button>`).join('')}</div>
       <ul class="lst" style="max-height:180px;overflow:auto">${Ly.lines.map(x => `<li>${fmtS(x.t)} · ${esc(x.text)}</li>`).join('')}</ul>
       <p class="hint">💡 영상이 노래보다 짧으면 뒷부분 가사가 안 나와요 → 위의 「노래 끝까지 맞추기」를 먼저 해 주세요. 장면 자막과 겹치면 가사를 ⬆ 위로 옮기세요.</p>`;
@@ -616,6 +617,7 @@ $('panel').addEventListener('input', e => {
   if (a === 'ss' && c && SELOV) { c.stk[SELOV.k].s = +v; drawNow(); return; } if (a === 'sv' && c && SELOV) { c.stk[SELOV.k].v = v; drawNow(); return; }
   if ((a === 'bw' || a === 'bh') && c && SELOV) { c.blur[SELOV.k][a === 'bw' ? 'w' : 'h'] = +v; drawNow(); return; }
   if (a === 'it') { P.info[el.dataset.v] = v; drawNow(); return; }
+  if (a === 'lyrsz') { if (P.lyrics) { P.lyrics.size = +v; drawNow(); } return; }
   if (a === 'lyr') { P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; P.lyrics.raw = v; return; }
   if (a === 'bf') { const L = ED.brands(), b = L.find(x => x.id === P.info.brandId); if (b) { b[el.dataset.v] = v; ED.saveBrands(L); drawNow(); } return; }
 });
@@ -667,7 +669,8 @@ $('panel').addEventListener('click', async e => {
     case 'font': P.capDef.font = v; busy('글씨체 불러오는 중…'); await ED.loadFonts([v || CAPS[P.capDef.style].font], P.clips.map(x => x.cap.t || '').join('') + '가나다'); busy(''); return re();
     case 'col': P.capDef.color = v; return re();
     case 'anim': P.capDef.anim = v; return re();
-    case 'capall': { const L = $('capAll').value.split('\n'); let k = 0; P.clips.forEach(x => { if (x.kind === 'card') return; if (k < L.length) x.cap.t = L[k].replace(/\s\/\s/g, '\n').trim(); k++; }); toast('✅ 순서대로 넣었어요'); return re(); }
+    case 'capall': { const L = $('capAll').value.split('\n'); let k = 0; P.clips.forEach(x => { if (x.kind === 'card') return; x.cap.t = (L[k] || '').replace(/\s\/\s/g, '\n').trim(); k++; }); toast('✅ 순서대로 넣었어요 (비운 줄은 자막 없음)'); return re(); }
+    case 'capclr': { if (!confirm('장면 자막을 전부 지울까요?\n(노래 가사 자막은 그대로 · ↩ 되돌리기로 살릴 수 있어요)')) return; P.clips.forEach(x => { if (x.kind !== 'card' && x.cap) x.cap.t = ''; }); toast('🗑 장면 자막을 전부 지웠어요'); return re(); }
     case 'emo': if (c && c.kind !== 'card') { c.stk.push({ k: 'emoji', v, x: .5 + (Math.random() - .5) * .2, y: .4 + (Math.random() - .5) * .2, s: 1, a: 'pop' }); SELOV = { type: 'stk', k: c.stk.length - 1 }; return re(); } return toast('장면을 먼저 골라 주세요');
     case 'badge': case 'menu': {
       if (!c || c.kind === 'card') return toast('장면을 먼저 골라 주세요');

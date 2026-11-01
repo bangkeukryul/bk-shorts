@@ -255,7 +255,7 @@ function lyricAt(Ly, t) {
 function drawLyrics(x, W, H, t) {
   const P = ED.P, Ly = P && P.lyrics; if (!Ly || !Ly.on || !Ly.lines || !Ly.lines.length) return;
   const A = lyricAt(Ly, t); if (!A || !A.text) return;
-  const m = Math.min(W, H), px = m * .062 * (Ly.size || 1), st = Ly.style || 'karaoke', font = Ly.font || (st === 'karaoke' ? 'blackhan' : 'noto');
+  const m = Math.min(W, H), px = m * .062 * (Ly.size || 1.3), st = Ly.style || 'karaoke', font = Ly.font || (st === 'karaoke' ? 'blackhan' : 'noto');
   x.save(); x.font = fspec(font, px); x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round'; x.miterLimit = 2;
   const lines = wrap(x, A.text, W * .88 - px), lh = px * 1.3, cy = (Ly.pos === 'top' ? .13 : Ly.pos === 'mid' ? .5 : .9) * H - (Ly.pos === 'top' ? 0 : (lines.length - 1) * lh / 2);
   const a = Math.min(1, (t - A.s) / .22, (A.e - t) / .22); x.globalAlpha = Math.max(0, a);
