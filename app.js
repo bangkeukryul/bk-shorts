@@ -319,6 +319,8 @@
     scheduleRebuild(0);
   });
   $('#photoInput').addEventListener('change', e => { addPhotos(e.target.files); e.target.value = ''; });
+  /* 📁 내 파일에서: 사진 고르기 화면에 안 보이는 다운받은 사진(다운로드 폴더) → 사진 · 동영상만 */
+  $('#photoFile').addEventListener('change', e => { const ok = Array.from(e.target.files || []).filter(f => /^(image|video)\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|mp4|mov|m4v|webm|3gp)$/i.test(f.name)); e.target.value = ''; if (!ok.length) { toast('사진이나 동영상 파일을 골라 주세요'); return; } addPhotos(ok); });
   $('#videoInput').addEventListener('change', e => { addVideos(e.target.files); e.target.value = ''; });
 
   // ═════════ 음악 ═════════

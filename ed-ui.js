@@ -46,6 +46,12 @@ $('fStart').addEventListener('change', async e => {
   commit(); TAB = 'edit'; renderPanel();
   toast(`🤖 「AI」 탭에서 자르기 · 자막을 한 번에 맡길 수 있어요`, 4500);
 });
+/* 📁 내 파일에서 고르기: 사진 고르기 화면 대신 「내 파일 · 다운로드」 목록으로 열림 → 사진 · 동영상만 골라서 위와 똑같이 */
+$('fStart2').addEventListener('change', e => {
+  const ok = Array.from(e.target.files || []).filter(f => /^(image|video)\//.test(f.type) || /\.(jpe?g|png|webp|gif|heic|mp4|mov|m4v|webm)$/i.test(f.name)); e.target.value = '';
+  if (!ok.length) { toast('사진이나 동영상 파일을 골라 주세요'); return; }
+  try { const dt = new DataTransfer(); ok.forEach(f => dt.items.add(f)); $('fStart').files = dt.files; $('fStart').dispatchEvent(new Event('change')); } catch (err) { toast('파일을 열 수 없어요'); }
+});
 async function checkResume() {
   let d = null; try { d = await IDB.get('p', 'cur'); } catch (e) { /* 없음 */ }
   if (!d || !d.P || !d.P.clips) { $('resume').hidden = true; return; }
@@ -289,7 +295,7 @@ function pEdit(c) {
     if (c.kind !== 'card') h += `<div class="grp"><h3>🖼 화면에 맞추기</h3>${chips('fit', { auto: '자동 (흐린 배경)', cover: '꽉 채우기', contain: '전체 보이기 (검은 배경)' }, c.fit)}<button type="button" data-a="focus" class="sec">📍 ${FOCUS ? '화면을 눌러 주세요…' : '보일 중심 맞추기 (얼굴이 잘릴 때)'}</button></div>`;
     h += `<div class="grp"><h3>🔀 넘어가는 효과 <small>이 장면이 시작될 때</small></h3>${chips('trans', Object.assign({ auto: '추천' }, TRANS), c.trans)}<button type="button" data-a="alltrans" class="sec">모든 장면에 같게</button></div>`;
   }
-  h += `<div class="grp"><h3>🗂 전체</h3><div class="btns2"><label class="btnf">＋ 사진 · 동영상 더<input type="file" data-a="addf" accept="image/*,video/*" multiple hidden></label><button type="button" data-a="sortdate">🗓 찍은 날짜 순서로</button></div></div>`;
+  h += `<div class="grp"><h3>🗂 전체</h3><div class="btns2"><label class="btnf">＋ 사진 · 동영상 더<input type="file" data-a="addf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 내 파일에서 더<input type="file" data-a="addf" multiple hidden></label><button type="button" data-a="sortdate">🗓 찍은 날짜 순서로</button></div></div>`;
   return h;
 }
 /* ── 💬 자막 ── */
