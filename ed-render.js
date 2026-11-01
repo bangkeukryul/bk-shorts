@@ -158,10 +158,21 @@ ED.ensureEnds = ensureEnds;
 function drawLayer(x, W, H, i, lt, atEnd) {
   const P = ED.P, c = P.clips[i], len = clipLen(c);
   if (c.kind === 'card') return drawCard(x, W, H, c, lt, len);
+  if (c.blank) return drawBlank(x, W, H, c, len);
   drawMedia(x, W, H, c, srcEl(c, atEnd && c.kind === 'video'), lt, len, i);
 }
+/* ⬜ 빈 장면: 편집 화면에서는 「빈 장면」 표시, 완성 영상에서는 검은 화면 */
+function drawBlank(x, W, H, c, len) {
+  x.save(); x.fillStyle = ED._pv ? '#2e2546' : '#000'; x.fillRect(0, 0, W, H);
+  if (ED._pv) {
+    const m = Math.min(W, H); x.setLineDash([m * .04, m * .025]); x.lineWidth = m * .012; x.strokeStyle = '#a78bfa'; x.strokeRect(m * .06, m * .06, W - m * .12, H - m * .12); x.setLineDash([]);
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillStyle = '#ede9fe'; x.font = fspec('blackhan', m * .09); x.fillText('⬜ 빈 장면', W / 2, H * .42);
+    x.font = fspec('noto', m * .045); x.fillStyle = '#c4b5fd'; x.fillText(`${len.toFixed(1)}초 · 나중에 사진을 넣어요`, W / 2, H * .42 + m * .11);
+  }
+  x.restore();
+}
 function drawFrame(x, W, H, t, opt) {
-  opt = opt || {};
+  opt = opt || {}; ED._pv = !!opt.hits;
   const P = ED.P; x.save(); x.fillStyle = '#000'; x.fillRect(0, 0, W, H); x.restore();
   if (!P || !P.clips.length) return;
   const A = clipAt(P, t); if (!A.c) return;
