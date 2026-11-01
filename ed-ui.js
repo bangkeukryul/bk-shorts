@@ -121,7 +121,7 @@ function sizeCanvas() {
   $('screen').style.aspectRatio = `${w} / ${h}`; $('screen').dataset.r = P.ratio;
   $('ratioLbl').textContent = (PURPOSE[P.purpose] || {}).ic + ' ' + P.ratio;
 }
-function renderAll() { sizeCanvas(); renderTL(); renderTabs(); renderPanel(); updUndo(); drawNow(); renderCut(); }
+function renderAll() { sizeCanvas(); renderTL(); renderTabs(); renderPanel(); updUndo(); drawNow(); renderCut(); renderPaste(); }
 
 /* ── 타임라인 ── */
 function renderTL() {
@@ -166,11 +166,11 @@ function phApply() {
 function phBind(ph) {
   ph.addEventListener('pointerdown', e => {
     e.preventDefault(); e.stopPropagation(); if (PLAY) pause(); try { ph.setPointerCapture(e.pointerId); } catch (er) { /* 무시 */ }
-    phD = { x: e.clientX, iv: setInterval(() => { if (!phD) return; const tl = $('tl'), r = tl.getBoundingClientRect(); if (phD.x < r.left + 40) { tl.scrollLeft -= 14; phApply(); } else if (phD.x > r.right - 40) { tl.scrollLeft += 14; phApply(); } }, 40) };
+    phD = { x: e.clientX, iv: setInterval(() => { if (!phD) return; const tl = $('tl'), r = tl.getBoundingClientRect(); if (phD.x < r.left + 70) { tl.scrollLeft -= 14; phApply(); } else if (phD.x > r.right - 70) { tl.scrollLeft += 14; phApply(); } }, 40) };
     ph.classList.add('drag');
   });
   ph.addEventListener('pointermove', e => { if (!phD) return; e.preventDefault(); phD.x = e.clientX; phApply(); });
-  const end = () => { if (!phD) return; clearInterval(phD.iv); phD = null; ph.classList.remove('drag'); TLNOCLICK = true; setTimeout(() => { TLNOCLICK = false; }, 350); renderTL(); renderPanel(); drawNow(); };
+  const end = () => { if (!phD) return; clearInterval(phD.iv); phD = null; ph.classList.remove('drag'); { const tl = $('tl'), kx = ph.offsetLeft - tl.scrollLeft; if (kx < 64) tl.scrollBy({ left: kx - 64, behavior: 'smooth' }); else if (kx > tl.clientWidth - 64) tl.scrollBy({ left: kx - tl.clientWidth + 64, behavior: 'smooth' }); } /* 손잡이가 화면 끝(휴대폰 뒤로 가기 제스처)에 붙지 않게 */ TLNOCLICK = true; setTimeout(() => { TLNOCLICK = false; }, 350); renderTL(); renderPanel(); drawNow(); };
   ph.addEventListener('pointerup', end); ph.addEventListener('pointercancel', end);
 }
 /* ── ✋ 사진 꾹 눌러 끌어서 순서 바꾸기 (살짝 밀면 넘기기 · 0.45초 꾹 누르면 들어 올리기) ── */
@@ -178,11 +178,13 @@ let LP = null;
 $('tl').addEventListener('contextmenu', e => { if (e.target.closest('.tli')) e.preventDefault(); });
 $('tl').addEventListener('pointerdown', e => {
   if (e.target.closest('#ph')) return; const b = e.target.closest('.tli[data-i]'); if (!b || PLAY) return;
-  const i = +b.dataset.i, c = P.clips[i]; if (!c || c.kind === 'card' || c.pin) return;
-  LP = { i, b, x: e.clientX, y: e.clientY, on: false, t: setTimeout(lpStart, 450) };
+  const i = +b.dataset.i, c = P.clips[i]; if (!c || c.kind === 'card') return;
+  LP = { i, b, x: e.clientX, y: e.clientY, x0: e.clientX, on: false, moved: false, t: setTimeout(lpStart, 450) };
 });
 function lpStart() {
-  if (!LP) return; LP.on = true; try { navigator.vibrate && navigator.vibrate(25); } catch (e) { /* 무시 */ }
+  if (!LP) return; try { navigator.vibrate && navigator.vibrate(25); } catch (e) { /* 무시 */ }
+  if (P.clips[LP.i] && P.clips[LP.i].pin) { const i = LP.i; LP = null; TLNOCLICK = true; setTimeout(() => { TLNOCLICK = false; }, 600); return clipMenu(i); }   // 고정 장면: 끌기 없이 메뉴만
+  LP.on = true;
   const r = LP.b.getBoundingClientRect(), gh = LP.b.cloneNode(true); gh.classList.add('tlghost'); gh.style.width = r.width + 'px'; gh.style.left = (LP.x - r.width / 2) + 'px'; gh.style.top = (r.top - 14) + 'px';
   const cs = LP.b.querySelectorAll('canvas'), cg = gh.querySelectorAll('canvas'); cs.forEach((cv, k) => { if (cg[k]) cg[k].getContext('2d').drawImage(cv, 0, 0); });
   document.body.appendChild(gh); LP.gh = gh; LP.b.style.opacity = '.3';
@@ -190,18 +192,123 @@ function lpStart() {
   LP.iv = setInterval(() => { if (!LP || !LP.on) return; const tl = $('tl'), rr = tl.getBoundingClientRect(); if (LP.x < rr.left + 40) { tl.scrollLeft -= 14; lpMove(LP.x); } else if (LP.x > rr.right - 40) { tl.scrollLeft += 14; lpMove(LP.x); } }, 40);
 }
 function lpIndex(cx) { const tl = $('tl'), r = tl.getBoundingClientRect(), x = cx - r.left + tl.scrollLeft, items = Array.from(tl.querySelectorAll('.tli[data-i]')); for (const it of items) if (x < it.offsetLeft + it.offsetWidth / 2) return { j: +it.dataset.i, left: it.offsetLeft - 3 }; const l = items[items.length - 1]; return { j: P.clips.length, left: l ? l.offsetLeft + l.offsetWidth + 2 : 0 }; }
-function lpMove(cx) { if (!LP || !LP.on) return; LP.x = cx; LP.gh.style.left = (cx - LP.gh.offsetWidth / 2) + 'px'; const d = lpIndex(cx); LP.j = d.j; LP.di.style.left = d.left + 'px'; }
+function lpMove(cx) { if (!LP || !LP.on) return; LP.x = cx; if (Math.abs(cx - LP.x0) > 14) LP.moved = true; LP.gh.style.left = (cx - LP.gh.offsetWidth / 2) + 'px'; const d = lpIndex(cx); LP.j = d.j; LP.di.style.left = d.left + 'px'; }
 document.addEventListener('pointermove', e => { if (!LP) return; if (!LP.on) { if (Math.hypot(e.clientX - LP.x, e.clientY - LP.y) > 10) { clearTimeout(LP.t); LP = null; } return; } e.preventDefault(); lpMove(e.clientX); }, { passive: false });
 $('tl').addEventListener('touchmove', e => { if (LP && LP.on) e.preventDefault(); }, { passive: false });
 function lpEnd(drop) {
   if (!LP) return; clearTimeout(LP.t); const L = LP; LP = null; if (!L.on) return;
   clearInterval(L.iv); L.gh.remove(); L.di.remove(); L.b.style.opacity = ''; TLNOCLICK = true; setTimeout(() => { TLNOCLICK = false; }, 350);
+  if (drop && !L.moved) { renderTL(); return clipMenu(L.i); }   // 꾹 눌렀다 그냥 떼면 → 복사 · 넣기 · 옮기기 메뉴
   if (!drop || L.j == null) return renderTL();
   const c = P.clips[L.i]; let j = L.j > L.i ? L.j - 1 : L.j; if (j === L.i) return renderTL();
   P.clips.splice(L.i, 1); const [lo, hi] = movRange(); j = clamp(j, lo, hi + 1); P.clips.splice(j, 0, c); SEL = j;
   commit(); renderPanel(); toast(`✋ ${j + 1}번째 자리로 옮겼어요`);
 }
 document.addEventListener('pointerup', () => lpEnd(true)); document.addEventListener('pointercancel', () => lpEnd(false));
+/* ═════════ 📄 복사 · 📋 붙여넣기 · 📍 몇 번과 몇 번 사이에 넣기 · 🗂 사진 서랍 ═════════ */
+let CLIPB = null, SHX = null;
+const srcCode = id => { const m = P.srcs.find(s => s.id === id); return m ? m.code : ''; };
+function cloneClip(c) { const d = JSON.parse(JSON.stringify(c)); d.id = uid('c'); d.pin = null; delete d.blank; return d; }
+function newFromSrc(id) { const m = P.srcs.find(s => s.id === id), s = SRC.get(id); if (!m || !s) return null; return m.kind === 'video' ? ED.newClip('video', id, { in: 0, out: s.dur }) : ED.newClip('image', id, { dur: PURPOSE[P.purpose].img }); }
+function nearPos() {   // 빨간 커서에서 가까운 장면 사이
+  const [lo, hi] = movRange(), A = clipAt(P, T); if (A.i < 0 || !A.c) return hi + 1;
+  return clamp(A.lt < clipLen(A.c) / 2 ? A.i : A.i + 1, lo, hi + 1);
+}
+const between = pos => pos <= 0 ? '맨 앞' : pos >= P.clips.length ? '맨 뒤' : `${pos}번과 ${pos + 1}번 사이`;
+function putAt(clip, pos, how) {
+  const [lo, hi] = movRange(), p = clamp(pos, lo, hi + 1);
+  P.clips.splice(p, 0, clip); SEL = p; T = timeline(P).st[p] + .02;
+  commit(); makeThumbs(); renderPanel(); drawNow();
+  const it = $('tl').querySelector(`.tli[data-i="${p}"]`); if (it) it.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  toast(`${how} ${p + 1}번 장면으로 넣었어요${p !== pos ? ' (오프닝 · 고정 장면 안쪽으로)' : ''} · 뒤 장면은 ${clipLen(clip).toFixed(1)}초 밀렸어요`, 4000);
+}
+function moveTo(i, pos) {
+  const [lo, hi] = movRange(), c = P.clips[i]; if (!c) return; let p = clamp(pos, lo, hi + 1); if (p > i) p--;
+  if (p === i) return toast('이미 그 자리예요'); P.clips.splice(i, 1); P.clips.splice(p, 0, c); SEL = p; T = timeline(P).st[p] + .02;
+  commit(); renderPanel(); drawNow(); toast(`↔ ${p + 1}번 장면으로 옮겼어요`);
+}
+/* 아래에서 올라오는 작은 창 */
+function sheet(html) {
+  let el = $('edSheet'); if (!el) { el = document.createElement('div'); el.id = 'edSheet'; el.className = 'edsheet'; document.body.appendChild(el); el.addEventListener('click', sheetClick); el.addEventListener('input', sheetInput); }
+  el.innerHTML = `<div class="shbg" data-s="close"></div><div class="shbox">${html}</div>`; el.hidden = false; fillThumbs(el);
+}
+function sheetClose() { const el = $('edSheet'); if (el) el.hidden = true; SHX = null; }
+function clipMenu(i) {
+  const c = P.clips[i]; if (!c || c.kind === 'card') return; SEL = i; renderTL();
+  SHX = { i, id: c.id };
+  sheet(`<div class="shh"><span class="shth" data-gth="${c.src || ''}"></span><div><b>${i + 1}번 장면</b><small>${c.blank ? '⬜ 빈칸' : esc(srcCode(c.src)) + (c.kind === 'video' ? ' 🎞' : ' 🖼')} · ${clipLen(c).toFixed(1)}초</small></div></div>
+    ${c.blank ? '' : `<button type="button" data-s="copy" class="pri">📄 복사하기 <small>빨간 커서를 옮긴 뒤 「📋 붙여넣기」</small></button>
+    <button type="button" data-s="where" data-v="copy">📍 한 번 더 넣기 — 몇 번과 몇 번 사이에</button>`}
+    ${c.pin ? '' : `<button type="button" data-s="where" data-v="move">↔ 이 장면 옮기기 — 몇 번과 몇 번 사이로</button>`}
+    <button type="button" data-s="del" class="dg">🗑 이 장면 지우기</button><button type="button" data-s="close" class="cl">닫기</button>`);
+}
+function whereSheet(ctx) {   // ctx: { mode:'copy'|'move'|'src', i, id, src }
+  SHX = ctx; const [lo, hi] = movRange(), def = clamp(nearPos(), lo, hi + 1);
+  const code = ctx.mode === 'src' ? srcCode(ctx.src) : srcCode((P.clips.find(x => x.id === ctx.id) || {}).src);
+  sheet(`<div class="shh"><span class="shth" data-gth="${ctx.mode === 'src' ? ctx.src : (P.clips.find(x => x.id === ctx.id) || {}).src || ''}"></span><div><b>📍 ${esc(code)} — 어디에 ${ctx.mode === 'move' ? '옮길까요' : '넣을까요'}?</b><small>아래 사진 줄의 번호를 보고 써 주세요</small></div></div>
+    <div class="shnum"><button type="button" data-s="n" data-v="-1">−</button><input type="number" id="shN" inputmode="numeric" min="${lo}" max="${hi + 1}" value="${def}"><button type="button" data-s="n" data-v="1">＋</button></div>
+    <p class="shsay">→ <b id="shSay">${between(def)}</b>에 ${ctx.mode === 'move' ? '옮겨요' : '들어가요'}</p>
+    <p class="hint" style="text-align:center;margin:0 0 8px">숫자 = 그 번호 장면 <b>바로 뒤</b> (지금 장면 1 ~ ${P.clips.length})</p>
+    <button type="button" data-s="put" class="pri">${ctx.mode === 'move' ? '↔ 옮기기' : '📍 넣기'}</button><button type="button" data-s="close" class="cl">취소</button>`);
+  const n = $('shN'); if (n) setTimeout(() => { try { n.focus(); n.select(); } catch (e) { /* 무시 */ } }, 60);
+}
+function sheetInput(e) { if (e.target.id === 'shN') { const v = parseInt(e.target.value, 10); $('shSay').textContent = isNaN(v) ? '숫자를 써 주세요' : between(v); } }
+function sheetClick(e) {
+  const b = e.target.closest('[data-s]'); if (!b) return; const k = b.dataset.s, v = b.dataset.v, X = SHX;
+  if (k === 'close') return sheetClose();
+  if (k === 'n') { const n = $('shN'), [lo, hi] = movRange(); n.value = clamp((parseInt(n.value, 10) || 0) + +v, lo, hi + 1); return sheetInput({ target: n }); }
+  if (!X) return sheetClose();
+  const i = X.id ? P.clips.findIndex(c => c.id === X.id) : -1, c = P.clips[i];
+  if (k === 'copy') { if (!c) return sheetClose(); CLIPB = { j: JSON.stringify(c), code: srcCode(c.src), src: c.src }; sheetClose(); renderPaste(); return toast(`📄 ${CLIPB.code}을 복사했어요 · 빨간 커서를 넣을 곳에 두고 「📋 붙여넣기」`, 4500); }
+  if (k === 'where') { if (!c) return sheetClose(); return whereSheet({ mode: v, id: c.id }); }
+  if (k === 'del') { if (!c) return sheetClose(); sheetClose(); P.clips.splice(i, 1); SEL = Math.min(i, P.clips.length - 1); T = Math.min(T, timeline(P).total); commit(); renderPanel(); return toast('🗑 지웠어요 (↩️ 되돌리기 가능)'); }
+  if (k === 'put') {
+    const n = parseInt($('shN').value, 10); if (isNaN(n)) return toast('숫자를 써 주세요'); sheetClose();
+    if (X.mode === 'move') return moveTo(i, n);
+    const nc = X.mode === 'src' ? newFromSrc(X.src) : c ? cloneClip(c) : null; if (!nc) return toast('사진을 찾지 못했어요');
+    return putAt(nc, n, '📍');
+  }
+}
+/* 📋 붙여넣기 줄 (복사해 두면 미리보기 아래에 나와요) */
+function renderPaste() {
+  const el = $('pastebar'); if (!el) return; if (!CLIPB || !P) { el.hidden = true; return; }
+  el.hidden = false; el.innerHTML = `<span class="pth" data-gth="${CLIPB.src || ''}"></span><button type="button" data-p="go" class="pgo">📋 ${esc(CLIPB.code)} 붙여넣기 <small id="pasteAt">${between(nearPos())}</small></button><button type="button" data-p="x" class="px" aria-label="복사 지우기">✕</button>`;
+  fillThumbs(el);
+}
+$('pastebar').addEventListener('click', e => {
+  const b = e.target.closest('[data-p]'); if (!b || !P) return;
+  if (b.dataset.p === 'x') { CLIPB = null; return renderPaste(); }
+  if (PLAY) pause(); if (!CLIPB) return; putAt(cloneClip(JSON.parse(CLIPB.j)), nearPos(), '📋');
+});
+/* 🗂 사진 서랍 (✂️ 편집 탭 맨 위) */
+function trayBox() {
+  const ids = P.srcs.filter(s => s.kind !== 'audio' && SRC.has(s.id)).map(s => s.id), use = {};
+  P.clips.forEach(c => { if (c.src) use[c.src] = (use[c.src] || 0) + 1; });
+  return `<div class="grp tray"><h3 style="margin-top:0">🗂 사진 서랍 <small>${ids.length}장 · 톡 = 빨간 커서 자리에 넣기 · 꾹 = 몇 번 사이에</small></h3>
+    <div class="trs">${ids.map(id => { const m = P.srcs.find(s => s.id === id); return `<button type="button" class="gbtn" data-a="trayput" data-v="${id}" data-lp="tray"><span data-gth="${id}"></span>${use[id] ? `<i>${use[id]}번 씀</i>` : '<i class="nu">안 씀</i>'}<small>${esc(m.code)}${m.kind === 'video' ? ' 🎞' : ''}</small></button>`; }).join('') || '<p class="hint">아직 담은 사진이 없어요</p>'}</div>
+    <p class="hint" style="margin:6px 0 0">지금 넣으면 → <b id="trayAt">${between(nearPos())}</b></p>
+    <div class="btns2"><label class="btnf">📷 갤러리에서 서랍에 담기<input type="file" data-a="trayf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 폴더에서 서랍에 담기<input type="file" data-a="trayf" multiple hidden></label></div>
+    <p class="hint" style="margin:4px 0 0">서랍에 담기만 하고 영상에는 아직 안 들어가요. 미리 많이 담아 두고 골라 넣으세요.</p></div>`;
+}
+async function trayFiles(fs) {
+  const n0 = P.clips.length, n = await addFiles(fs, n0); if (!n) return;
+  P.clips.splice(n0); if (SEL >= P.clips.length) SEL = P.clips.length - 1;
+  commit(); renderPanel(); toast(`🗂 ${n}개를 사진 서랍에 담았어요 · 톡 누르면 빨간 커서 자리에 들어가요`, 4000);
+}
+/* 꾹 누르기 (사진 서랍 · 순서대로 톡톡 사진) → 몇 번 사이에 */
+let PLP = null, PNOCLICK = false;
+$('panel').addEventListener('contextmenu', e => { if (e.target.closest('[data-lp]')) e.preventDefault(); });
+$('panel').addEventListener('pointerdown', e => {
+  PNOCLICK = false; const b = e.target.closest('[data-lp]'); if (!b) return;
+  PLP = { b, x: e.clientX, y: e.clientY, t: setTimeout(() => { const L = PLP; PLP = null; if (!L) return; PNOCLICK = true; try { navigator.vibrate && navigator.vibrate(25); } catch (er) { /* 무시 */ }
+    if (L.b.dataset.lp === 'tray') whereSheet({ mode: 'src', src: L.b.dataset.v }); else whereSheet({ mode: 'copy', id: L.b.dataset.v }); }, 480) };
+});
+document.addEventListener('pointermove', e => { if (PLP && Math.hypot(e.clientX - PLP.x, e.clientY - PLP.y) > 10) { clearTimeout(PLP.t); PLP = null; } });
+['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, () => { if (PLP) { clearTimeout(PLP.t); PLP = null; } }));
+/* 🔍 미리보기 크게 · 작게 */
+function pvSet(big) { document.body.classList.toggle('pvbig', !!big); const b = $('pvBtn'); if (b) { b.textContent = big ? '🔍 작게' : '🔍 크게'; b.setAttribute('aria-pressed', String(!!big)); } try { localStorage.setItem('bkEdPvBig', big ? '1' : ''); } catch (e) { /* 무시 */ } }
+$('pvBtn').addEventListener('click', () => { pvSet(!document.body.classList.contains('pvbig')); renderTL(); });
+try { pvSet(localStorage.getItem('bkEdPvBig') === '1'); } catch (e) { pvSet(false); }
 function select(i, seek) {
   if (PLAY) pause(); SEL = i; SELOV = null; FOCUS = false;
   if (seek && i >= 0) { const { st } = timeline(P); T = st[i] + .02; }
@@ -396,8 +503,9 @@ function renderCut() {
   cutInfo();
 }
 function cutInfo() {
-  const el = $('cutInfo'); if (!el || !P) return; const A = clipAt(P, T); if (A.i < 0) { el.textContent = ''; return; }
-  el.textContent = `${fmt(T)} · 장면 ${A.i + 1} ${A.lt.toFixed(1)} / ${clipLen(A.c).toFixed(1)}초`;
+  const el = $('cutInfo'); if (!el || !P || !P.clips.length) return; const A = clipAt(P, T); if (A.i < 0) { el.textContent = ''; return; }
+  el.textContent = `${fmt(T)} · ${A.i + 1}번 ${A.lt.toFixed(1)}/${clipLen(A.c).toFixed(1)}초`;
+  const w = between(nearPos()), pa = $('pasteAt'), ta = $('trayAt'); if (pa) pa.textContent = w; if (ta) ta.textContent = w;
 }
 $('cutbar').addEventListener('pointerdown', e => { const b = e.target.closest('[data-c="tapnow"]'); if (!b) return; e.preventDefault(); tapNow(); });
 $('cutbar').addEventListener('click', e => {
@@ -463,7 +571,7 @@ const cutHelp = () => `<details class="grp cuthelp"><summary>⏱ 미리보기 �
   <li><b>🎵 톡톡 넘기기</b> — 노래를 들으며 「다음 장면!」 순간마다 큰 버튼을 톡. 처음부터 끝까지 한 번에 맞춰요. (↩ 다시 = 방금 것 취소)</li>
   <li><b>뒤 장면</b> 버튼으로 바꿔요 — <b>A 그대로</b>: 옆 장면만 늘거나 줄고 그 뒤는 제자리 (뒤쪽을 이미 맞춰 뒀을 때) · <b>B 같이</b>: 뒤 장면 전부가 함께 당겨지거나 밀려요 (⬜ 빈칸 길이를 맞출 때 편해요)</li></ol></details>`;
 function pEdit(c) {
-  let h = head(c) + cutHelp();
+  let h = trayBox() + head(c) + cutHelp();
   if (c && c.blank) h += blankFill(c);
   if (c) {
     h += c.kind === 'card' ? `<div class="btns4"><button type="button" data-a="mv" data-v="-1">◀ 앞으로</button><button type="button" data-a="mv" data-v="1">뒤로 ▶</button><button type="button" data-a="dup">📄 복제</button><button type="button" data-a="del" class="dg">🗑 지우기</button></div>`
@@ -764,8 +872,8 @@ function tapUI() {
   if (!mid.length) return '<div class="grp"><p class="empty">정리할 장면이 없어요.</p></div>';
   TAPORD = TAPORD.filter(id => mid.some(c => c.id === id));
   return `<div class="grp"><h3>🔢 순서대로 톡톡 <small>${TAPORD.length} / ${mid.length}장</small></h3>
-    <p class="hint" style="margin-top:0">보여 줄 순서대로 사진을 톡톡 누르세요 (다시 누르면 빠져요). 📌 첫 화면 · 🏁 엔딩 고정 · 오프닝 · 엔딩 카드는 그대로예요.</p>
-    <div class="ggrid">${mid.map(c => { const k = TAPORD.indexOf(c.id), sm = P.srcs.find(s => s.id === c.src); return `<button type="button" class="gbtn${k >= 0 ? ' on' : ''}" data-a="otap" data-v="${c.id}"><span data-gth="${c.src}"></span>${k >= 0 ? `<em>${k + 1}</em>` : ''}<small>${esc(sm ? sm.code : '')}${c.kind === 'video' ? ' 🎞' : ''}</small></button>`; }).join('')}</div>
+    <p class="hint" style="margin-top:0">보여 줄 순서대로 사진을 톡톡 누르세요 (다시 누르면 빠져요). <b>꾹 누르면</b> 「몇 번과 몇 번 사이」에 그 사진을 한 번 더 넣어요. 📌 첫 화면 · 🏁 엔딩 고정 · 오프닝 · 엔딩 카드는 그대로예요.</p>
+    <div class="ggrid">${mid.map(c => { const k = TAPORD.indexOf(c.id), sm = P.srcs.find(s => s.id === c.src); return `<button type="button" class="gbtn${k >= 0 ? ' on' : ''}" data-a="otap" data-v="${c.id}" data-lp="ord"><span data-gth="${c.src}"></span>${k >= 0 ? `<em>${k + 1}</em>` : ''}<small>${esc(sm ? sm.code : '')}${c.kind === 'video' ? ' 🎞' : ''}</small></button>`; }).join('')}</div>
     <h4>안 누른 사진은</h4>${chips('orest', { after: '뒤에 그대로 두기', drop: '빼기' }, ORDREST)}
     <div class="btns2"><button type="button" data-a="otapok" class="pri">✅ 이 순서로 정리</button><button type="button" data-a="otapclr" class="sec" style="margin-top:0">↺ 처음부터</button></div></div>`;
 }
@@ -1061,12 +1169,14 @@ $('panel').addEventListener('change', async e => {
   if (el.type === 'file') {
     const fs = Array.from(el.files || []); el.value = ''; if (!fs.length) return;
     if (a === 'blankf') return blankFiles(fs);
+    if (a === 'trayf') return trayFiles(fs);
     if (a === 'addf') { const pos = insPos(), n = await addFiles(fs, pos); commit(); if (n && pos != null) select(pos, true); else renderPanel(); toast(pos == null ? `＋ ${n}개를 맨 뒤에 넣었어요` : `＋ ${n}개를 장면 ${pos + 1} 자리(커서 앞)에 넣었어요`, 3500); }
     if (a === 'musf') { const f = fs[0], id = uid('s'), meta = { id, code: 'A' + (P.nA++), kind: 'audio', name: f.name }; busy('음악 여는 중…'); const s = await ED.loadSource(meta, f); busy(''); if (!s.buf) return toast('음악 파일을 열 수 없어요 (MP3 · M4A 권장)'); meta.dur = s.dur; P.srcs.push(meta); try { await IDB.put('f', id, f); } catch (er) { /* 공간 */ } P.music.kind = 'file'; P.music.fileId = id; commit(); renderPanel(); toast(timeline(P).total < s.dur - 3 ? '🎵 내 음악을 넣었어요 · 노래가 영상보다 길어요 → 아래 「노래 끝까지 자동 맞추기」를 눌러 보세요' : '🎵 내 음악을 넣었어요', 4500); }
     if (a === 'logo') { const f = fs[0], url = URL.createObjectURL(f), im = await ENG.loadImage(url), k = Math.min(1, 360 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); const L = ED.brands(), b = L.find(x => x.id === P.info.brandId); if (b) { b.logo = cv.toDataURL('image/png'); ED.saveBrands(L); } commit(); renderPanel(); }
   }
 });
 $('panel').addEventListener('click', async e => {
+  if (PNOCLICK) { PNOCLICK = false; return; }
   const b = e.target.closest('[data-a]'); if (!b || b.tagName === 'INPUT' || b.tagName === 'TEXTAREA') return;
   const a = b.dataset.a, v = b.dataset.v, c = cur(), { st } = timeline(P);
   const re = (noHist) => { commit(noHist); renderPanel(); };
@@ -1078,6 +1188,7 @@ $('panel').addEventListener('click', async e => {
     case 'blanknext': { const B = blanks(); if (!B.length) return toast('빈칸이 없어요'); const j = B.find(i => i > SEL); return select(j != null ? j : B[0], true); }
     case 'blankdelall': { const B = blanks(); if (!B.length || !confirm2(`빈 장면 ${B.length}개를 전부 지울까요?\n(뒤 사진들이 다시 앞으로 당겨져요 · ↩️ 되돌리기 가능)`)) return; P.clips = P.clips.filter(x => !x.blank); SEL = Math.min(SEL, P.clips.length - 1); T = Math.min(T, timeline(P).total); toast('🗑 빈칸을 전부 지웠어요'); return re(); }
     case 'lenn': return lenNudge(+v);
+    case 'trayput': { if (PLAY) pause(); const nc = newFromSrc(v); if (!nc) return toast('사진을 열 수 없어요'); return putAt(nc, nearPos(), '🗂'); }
     case 'bmerge': return blankMerge();
     case 'bmergeall': return blankMergeAll();
     case 'bjoin': return blankJoin(+v);
