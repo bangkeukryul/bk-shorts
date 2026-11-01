@@ -114,3 +114,12 @@ details.sub{margin-top:10px;border-top:1px dashed var(--ln);padding-top:8px}deta
 #ph b{width:36px;height:36px;margin-left:-18px}
 .tli.blank{background:repeating-linear-gradient(45deg,#ede9fe 0 8px,#f5f3ff 8px 16px);border:2px dashed #8b5cf6;color:#5b21b6}
 .blkbox{background:#f5f3ff;border:2px dashed #8b5cf6;border-radius:14px;padding:10px 12px}
+.cutbar{width:min(100%,560px);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:5px}
+.cutbar button{border:0;border-radius:10px;padding:6px 2px;min-height:44px;font-weight:800;font-size:.8rem;line-height:1.2;background:#efe9fb;color:#4c2a9e;cursor:pointer;touch-action:manipulation}
+.cutbar button.tapgo{background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff}
+.cutbar button.md{background:#fff;border:1.5px solid var(--ac);font-weight:700;font-size:.72rem;color:var(--mu)}.cutbar button.md b{display:block;font-size:.84rem;color:#4c2a9e}
+.cbi{margin-left:auto;font-size:.76rem;color:var(--mu);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cutbar.tapping{grid-template-columns:52px 1fr 52px}.cutbar .sm{font-size:1.1rem;background:#fff;border:1.5px solid var(--ln)}.cutbar .sm small{display:block;font-size:.7rem}
+.cutbar .tapbig{min-height:58px;font-size:1.2rem;font-weight:900;background:linear-gradient(135deg,#8b5cf6,#6d28d9);color:#fff;user-select:none;-webkit-user-select:none}.cutbar .tapbig small{display:block;font-size:.76rem;font-weight:700;opacity:.9}.cutbar .tapbig:active{transform:scale(.98);filter:brightness(1.15)}
+.cuthelp summary{cursor:pointer;font-weight:800;color:var(--ac2);font-size:.9rem}.cuthelp ol{margin:8px 0 0;padding-left:20px;font-size:.86rem;line-height:1.6}.cuthelp li{margin:3px 0}
+.cbi+#ratioLbl{margin-left:6px}

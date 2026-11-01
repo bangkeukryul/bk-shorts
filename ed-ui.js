@@ -121,7 +121,7 @@ function sizeCanvas() {
   $('screen').style.aspectRatio = `${w} / ${h}`; $('screen').dataset.r = P.ratio;
   $('ratioLbl').textContent = (PURPOSE[P.purpose] || {}).ic + ' ' + P.ratio;
 }
-function renderAll() { sizeCanvas(); renderTL(); renderTabs(); renderPanel(); updUndo(); drawNow(); }
+function renderAll() { sizeCanvas(); renderTL(); renderTabs(); renderPanel(); updUndo(); drawNow(); renderCut(); }
 
 /* ── 타임라인 ── */
 function renderTL() {
@@ -143,7 +143,7 @@ function renderTL() {
   playhead();
 }
 function playhead() {
-  const bt = $('blkT'); if (bt) bt.textContent = fmtS(T);
+  const bt = $('blkT'); if (bt) bt.textContent = fmtS(T); cutInfo();
   const A = clipAt(P, T), items = $('tl').querySelectorAll('.tli[data-i]'); let ph = $('ph'); if (!ph) { ph = document.createElement('i'); ph.id = 'ph'; ph.innerHTML = '<b></b>'; phBind(ph); }
   const it = items[A.i]; if (!it) { ph.remove(); return; }
   if (ph.parentNode !== $('tl')) $('tl').appendChild(ph);
@@ -240,7 +240,12 @@ let premixT = 0;
 function premix() { clearTimeout(premixT); premixT = setTimeout(() => { if (!PLAY && !exp.busy && P && P.clips.length) getMix(true).catch(() => {}); }, 1500); }
 let useAC = true;
 const clock = () => useAC ? ED.ac().currentTime : performance.now() / 1000;
+let PSTART = false;   // ▶ 준비 중에 또 누르면 소리가 두 번 나지 않게
 async function play() {
+  if (PLAY) return pause(); if (PSTART) return;
+  PSTART = true; renderCut(); try { await play0(); } finally { PSTART = false; renderCut(); }
+}
+async function play0() {
   if (PLAY) return pause();
   const ac = ED.ac();  // 누르는 순간 소리 장치를 깨워야 휴대폰에서 소리가 나요
   const { total } = timeline(P); if (total < .2) return;
@@ -251,13 +256,13 @@ async function play() {
   useAC = ac.state === 'running';
   if (ab && useAC) { asrc = ac.createBufferSource(); asrc.buffer = ab; asrc.connect(ac.destination); asrc.start(0, T); }
   else if (ab) toast('🔇 소리가 안 나오면 ▶를 한 번 더 눌러 주세요');
-  acT0 = clock(); T0 = T; PLAY = true; $('playBtn').textContent = '⏸'; SELOV = null; loop();
+  acT0 = clock(); T0 = T; PLAY = true; $('playBtn').textContent = '⏸'; SELOV = null; loop(); renderCut();
 }
 function pause() {
   PLAY = false; cancelAnimationFrame(raf); $('playBtn').textContent = '▶';
   try { if (asrc) asrc.stop(); } catch (e) { /* 이미 멈춤 */ } asrc = null;
   for (const s of SRC.values()) if (s.vid) s.vid.pause();
-  drawNow();
+  drawNow(); renderCut();
 }
 function loop() {
   if (!PLAY) return;
@@ -282,6 +287,125 @@ function loop() {
 }
 $('playBtn').addEventListener('click', play);
 $('fine').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (!b || !P) return; if (PLAY) pause(); const { total } = timeline(P); T = clamp(T + +b.dataset.d, 0, Math.max(0, total - .01)); const A = clipAt(P, T); $('tLbl').textContent = `${fmtS(T)} / ${fmtS(total)}`; $('scrub').value = T.toFixed(2); playhead(); if (A.i !== SEL) { SEL = A.i; renderTL(); renderPanel(); } drawNow(); });
+/* ═════════ ⏱ 장면 끝 맞추기: ✂️ 여기서 끝 · ➡️ 앞 장면을 여기까지 · 🎵 들으면서 톡톡 넘기기 ═════════
+   A(roll)  = 경계만 옮기기 → 옆 장면이 그만큼 늘거나 줄고, 그 뒤 장면들은 제자리
+   B(ripple)= 뒤 장면 전부가 함께 당겨지거나 밀림 */
+const r2 = v => Math.round(v * 100) / 100, r1 = v => Math.round(v * 10) / 10;
+const minLen = c => c.kind === 'card' ? 1 : .5;
+const cutMode = () => (P && P.cutMode === 'ripple') ? 'ripple' : 'roll';
+function srcDur(c) { const s = SRC.get(c.src), m = P.srcs.find(x => x.id === c.src); return s && s.dur ? s.dur : m && m.dur ? m.dur : c.out; }
+function setLenBack(c, L) {   // 끝을 옮겨서 길이 L (시작은 그대로)
+  L = Math.max(minLen(c), L);
+  if (c.kind !== 'video') { c.dur = r2(L); return; }
+  const sp = c.speed || 1, hold = c.hold || 0, cur = (c.out - c.in) / sp + hold;
+  if (L < cur) { let cut = cur - L; const h = Math.min(hold, cut); c.hold = r2(hold - h); cut -= h; if (cut > 0) c.out = r2(Math.max(c.in + .1, c.out - cut * sp)); }
+  else { let add = L - cur; const g = Math.min(add, Math.max(0, (srcDur(c) - c.out) / sp)); c.out = r2(c.out + g * sp); add -= g; if (add > .001) c.hold = r2(hold + add); }
+}
+function setLenFront(c, L) {   // 시작을 옮겨서 길이 L (끝은 그대로)
+  L = Math.max(minLen(c), L); const old = clipLen(c);
+  if (c.kind !== 'video') c.dur = r2(L);
+  else {
+    const sp = c.speed || 1;
+    if (L < old) { let cut = old - L; const f = Math.min(cut, Math.max(0, (c.out - c.in) / sp - .2)); c.in = r2(c.in + f * sp); cut -= f; if (cut > 0) c.hold = r2(Math.max(0, (c.hold || 0) - cut)); }
+    else { let add = L - old; const g = Math.min(add, c.in / sp); c.in = r2(c.in - g * sp); add -= g; if (add > .001) c.hold = r2((c.hold || 0) + add); }
+  }
+  const sh = old - clipLen(c);   // 효과음은 노래의 같은 자리에 남게
+  if (sh && (c.sfx || []).length) c.sfx = c.sfx.map(s => ({ k: s.k, at: r2(s.at - sh) })).filter(s => s.at >= 0 && s.at < clipLen(c));
+}
+/* 장면 i가 tEnd(노래 시간)에 끝나게 — 0.1초 단위로 */
+function setEnd(i, tEnd) {
+  const c = P.clips[i]; if (!c) return null;
+  const { st } = timeline(P), old = clipLen(c), L = Math.max(minLen(c), r2(r1(tEnd) - st[i]));
+  if (Math.abs(L - old) < .03) return { d: 0 };
+  const n = P.clips[i + 1], roll = cutMode() === 'roll' && !!n;
+  setLenBack(c, L); const d = clipLen(c) - old; let push = 0;
+  if (roll) { const want = clipLen(n) - d, ok = Math.max(minLen(n), want); setLenFront(n, ok); push = r2(ok - want); }
+  return { d: r2(d), push, roll, len: clipLen(c) };
+}
+function cutMsg(i, r, verb) {
+  const s = Math.abs(r.d).toFixed(1);
+  let m = `${verb} 장면 ${i + 1} → ${r.len.toFixed(1)}초 · `;
+  m += r.roll ? (r.d < 0 ? `다음 장면이 ${s}초 일찍 시작 (그 뒤는 그대로)` : `다음 장면이 ${s}초 늦게 시작 (그 뒤는 그대로)`) : (r.d < 0 ? `뒤 장면이 모두 ${s}초 당겨졌어요` : `뒤 장면이 모두 ${s}초 밀렸어요`);
+  if (r.push > .05) m += ` · 다음 장면이 너무 짧아져 뒤를 ${r.push.toFixed(1)}초 밀었어요`;
+  return m;
+}
+function afterCut(i) {
+  commit(); const { st } = timeline(P); T = (st[i + 1] != null ? st[i + 1] : st[i]) + .02; SEL = clipAt(P, T).i;
+  renderTL(); renderPanel(); drawNow();
+  const it = $('tl').querySelector(`.tli[data-i="${SEL}"]`); if (it) it.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
+function cutHere() {
+  if (PLAY) pause(); const A = clipAt(P, T); if (A.i < 0) return;
+  if (A.lt < .3) return toast('이 장면이 막 시작한 자리예요 · 앞 장면을 늘리려면 「➡️ 앞 장면을 여기까지」', 4000);
+  const r = setEnd(A.i, T); if (!r || !r.d) return toast('이미 여기서 끝나요');
+  afterCut(A.i); toast(cutMsg(A.i, r, '✂️'), 4500);
+}
+function extHere() {
+  if (PLAY) pause(); const A = clipAt(P, T); if (A.i <= 0) return toast('맨 앞 장면이라 늘릴 앞 장면이 없어요');
+  if (A.lt < .05) return toast('이미 여기서 장면이 바뀌어요');
+  const r = setEnd(A.i - 1, T); if (!r || !r.d) return toast('이미 여기서 바뀌어요');
+  afterCut(A.i - 1); toast(cutMsg(A.i - 1, r, '➡️'), 4500);
+}
+/* 이 장면 길이 바꾸기 (편집 탭 −1 · −0.1 · +0.1 · +1) */
+function lenNudge(dv) {
+  const c = cur(); if (!c) return; const { st } = timeline(P), r = setEnd(SEL, st[SEL] + clipLen(c) + dv);
+  if (!r || !r.d) return toast(clipLen(c) <= minLen(c) + .01 ? `더 짧게는 안 돼요 (최소 ${minLen(c)}초)` : '더 바꿀 수 없어요');
+  if (T > st[SEL] + clipLen(c)) T = st[SEL] + clipLen(c) - .05;
+  commit(); renderPanel(); toast(cutMsg(SEL, r, '⏱'), 3500);
+}
+/* 🎵 들으면서 톡톡 */
+let TAPC = null;
+function tapStart() {
+  if (!P) return; const A = clipAt(P, T); if (A.i < 0) return;
+  if (A.i >= P.clips.length - 1) { T = 0; }
+  TAPC = { i: clipAt(P, T).i, n: 0 }; renderCut();
+  if (!PLAY) play();
+  toast('🎵 노래를 듣다가 「다음 장면!」이라고 느끼는 순간에 큰 버튼을 톡 누르세요', 5000);
+}
+function tapNow() {
+  if (!TAPC || PSTART) return; if (!PLAY) { TAPC.i = clipAt(P, T).i; play(); renderCut(); return; }
+  const i = TAPC.i, { st } = timeline(P), t = T;
+  if (i >= P.clips.length - 1) return tapStop('✅ 마지막 장면까지 맞췄어요 · ▶로 확인해 보세요');
+  if (t - st[i] < .4) return;   // 너무 빨리 두 번 누름
+  const r = setEnd(i, t); TAPC.i = i + 1; TAPC.n++;
+  commit(); renderCut();
+  try { navigator.vibrate && navigator.vibrate(15); } catch (e) { /* 무시 */ }
+  if (r && r.d) { const it = $('tl').querySelector(`.tli[data-i="${i + 1}"]`); if (it) it.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); }
+  const nx = P.clips[TAPC.i]; if (nx && nx.kind === 'card' && nx.card !== 'title') tapStop(`✅ 엔딩 카드까지 왔어요 · 장면 ${TAPC.n}개를 노래에 맞췄어요`);
+}
+function tapBack() {
+  if (!TAPC) return; if (PLAY) pause();
+  if (TAPC.n > 0) { undo(-1); TAPC.n--; TAPC.i = Math.max(0, TAPC.i - 1); }
+  const { st } = timeline(P); T = Math.max(0, (st[TAPC.i] || 0) - 1); renderCut(); play();
+  toast(`↩ 장면 ${TAPC.i + 1} 끝을 다시 눌러 주세요`, 3000);
+}
+function tapStop(msg) {
+  const n = TAPC ? TAPC.n : 0; TAPC = null; if (PLAY) pause(); renderCut(); renderPanel();
+  toast(msg || (n ? `■ 그만했어요 · 장면 ${n}개를 맞췄어요 (↩️ 되돌리기로 하나씩 취소)` : '■ 그만했어요'), 4500);
+}
+function renderCut() {
+  const el = $('cutbar'); if (!el || !P) return;
+  if (TAPC) {
+    el.className = 'cutbar tapping';
+    el.innerHTML = `<button type="button" data-c="tapback" class="sm">↩<small>다시</small></button><button type="button" data-c="tapnow" class="tapbig">${PLAY ? `👆 다음 장면!<small>장면 ${TAPC.i + 1} 여기서 끝</small>` : PSTART ? '⏳ 노래 준비 중…' : '▶ 이어서 톡톡'}</button><button type="button" data-c="tapstop" class="sm">■<small>그만</small></button>`;
+  } else {
+    const m = cutMode();
+    el.className = 'cutbar';
+    el.innerHTML = `<button type="button" data-c="cut">✂️ 여기서 끝</button><button type="button" data-c="ext">➡️ 앞 장면<br>여기까지</button><button type="button" data-c="tap" class="tapgo">🎵 톡톡<br>넘기기</button><button type="button" data-c="mode" class="md">뒤 장면<b>${m === 'ripple' ? 'B 같이' : 'A 그대로'}</b></button>`;
+  }
+  cutInfo();
+}
+function cutInfo() {
+  const el = $('cutInfo'); if (!el || !P) return; const A = clipAt(P, T); if (A.i < 0) { el.textContent = ''; return; }
+  el.textContent = `${fmt(T)} · 장면 ${A.i + 1} ${A.lt.toFixed(1)} / ${clipLen(A.c).toFixed(1)}초`;
+}
+$('cutbar').addEventListener('pointerdown', e => { const b = e.target.closest('[data-c="tapnow"]'); if (!b) return; e.preventDefault(); tapNow(); });
+$('cutbar').addEventListener('click', e => {
+  const b = e.target.closest('[data-c]'); if (!b || !P) return; const k = b.dataset.c;
+  if (k === 'cut') return cutHere(); if (k === 'ext') return extHere(); if (k === 'tap') return tapStart();
+  if (k === 'tapback') return tapBack(); if (k === 'tapstop') return tapStop();
+  if (k === 'mode') { P.cutMode = cutMode() === 'ripple' ? 'roll' : 'ripple'; commit(); renderCut(); renderPanel(); return toast(P.cutMode === 'ripple' ? 'B: 장면 길이를 바꾸면 뒤 장면이 모두 함께 움직여요' : 'A: 옆 장면만 늘거나 줄고, 그 뒤 장면은 제자리예요', 3500); }
+});
 $('scrub').addEventListener('input', e => { if (PLAY) pause(); T = +e.target.value; const A = clipAt(P, T); if (A.i !== SEL) { SEL = A.i; renderTL(); renderPanel(); } drawNow(); });
 $('undoBtn').addEventListener('click', () => undo(-1)); $('redoBtn').addEventListener('click', () => undo(1));
 
@@ -331,8 +455,15 @@ function renderPanel() {
 function autoGrow(t) { t.style.height = 'auto'; t.style.height = Math.min(320, t.scrollHeight + 4) + 'px'; }
 
 /* ── ✂️ 편집 ── */
+const lenBox = c => `<div class="nudge"><button type="button" data-a="lenn" data-v="-1">−1초</button><button type="button" data-a="lenn" data-v="-0.1">−0.1</button><button type="button" data-a="lenn" data-v="0.1">+0.1</button><button type="button" data-a="lenn" data-v="1">+1초</button></div><p class="hint" style="margin:4px 0 0">지금 <b>${clipLen(c).toFixed(1)}초</b> · 뒤 장면은 <b>${cutMode() === 'ripple' ? 'B 같이 당기기 · 밀기' : 'A 그대로 (다음 장면만 늘고 줄어요)'}</b> — 미리보기 아래 「뒤 장면」 버튼으로 바꿔요</p>`;
+const cutHelp = () => `<details class="grp cuthelp"><summary>⏱ 미리보기 아래 「✂️ 여기서 끝 · ➡️ 앞 장면 여기까지 · 🎵 톡톡」 쓰는 법</summary><ol>
+  <li>▶로 노래를 듣다가 장면을 바꾸고 싶은 곳에서 ⏸ → <b>◀ 0.1초 ▶</b>로 빨간 커서를 딱 맞춰요.</li>
+  <li><b>✂️ 여기서 끝</b> — 빨간 커서가 있는 장면을 여기까지로 → 다음 장면이 바로 여기서 시작해요.</li>
+  <li><b>➡️ 앞 장면 여기까지</b> — 장면이 너무 일찍 바뀌었을 때, 커서를 다음 장면 안에 두고 누르면 앞 장면이 커서까지 늘어나요.</li>
+  <li><b>🎵 톡톡 넘기기</b> — 노래를 들으며 「다음 장면!」 순간마다 큰 버튼을 톡. 처음부터 끝까지 한 번에 맞춰요. (↩ 다시 = 방금 것 취소)</li>
+  <li><b>뒤 장면</b> 버튼으로 바꿔요 — <b>A 그대로</b>: 옆 장면만 늘거나 줄고 그 뒤는 제자리 (뒤쪽을 이미 맞춰 뒀을 때) · <b>B 같이</b>: 뒤 장면 전부가 함께 당겨지거나 밀려요 (⬜ 빈칸 길이를 맞출 때 편해요)</li></ol></details>`;
 function pEdit(c) {
-  let h = head(c);
+  let h = head(c) + cutHelp();
   if (c && c.blank) h += blankFill(c);
   if (c) {
     h += c.kind === 'card' ? `<div class="btns4"><button type="button" data-a="mv" data-v="-1">◀ 앞으로</button><button type="button" data-a="mv" data-v="1">뒤로 ▶</button><button type="button" data-a="dup">📄 복제</button><button type="button" data-a="del" class="dg">🗑 지우기</button></div>`
@@ -351,9 +482,10 @@ function pEdit(c) {
         <p class="hint">가운데 필요 없는 부분은: 그 앞에서 한 번, 뒤에서 한 번 <b>나누기</b> → 가운데 조각 <b>🗑 지우기</b></p></div>
        <div class="grp"><h3>⏩ 속도</h3>${chips('speed', [['0.5', '0.5× 느리게'], ['1', '1× 보통'], ['1.5', '1.5×'], ['2', '2× 빠르게'], ['3', '3×']], c.speed)}<p class="hint">속도를 바꾸면 소리 높낮이도 함께 바뀌어요 (재밌는 효과)</p></div>
        <div class="grp"><h3>🔊 원래 소리</h3>${chips('mute', [['0', '🔊 켜기'], ['1', '🔇 끄기']], c.mute ? 1 : 0)}${c.mute ? '' : range('vol', c.vol, 0, 1.5, .05, '크기 %')}</div>
-       <div class="grp"><h3>⏸ 마지막 화면 멈춤</h3>${chips('hold', { 0: '없음', 1: '1초', 2: '2초', 3: '3초' }, c.hold || 0)}</div>`;
-    } else if (c.kind === 'image') h += `<div class="grp"><h3>⏱ 보여 줄 시간</h3>${range('dur', c.dur, 1, 12, .5, '초')}<button type="button" data-a="alldur" class="sec">모든 사진을 ${c.dur}초로</button></div>`;
-    else h += `<div class="grp"><h3>⏱ 카드 시간</h3>${range('dur', c.dur, 2, 12, .5, '초')}<p class="hint">카드 글자는 <b>🏷 정보</b> 탭에서 고쳐요.</p><button type="button" data-a="goinfo" class="sec">🏷 정보 탭 열기</button></div>`;
+       <div class="grp"><h3>⏸ 마지막 화면 멈춤</h3>${chips('hold', { 0: '없음', 1: '1초', 2: '2초', 3: '3초' }, c.hold || 0)}</div>
+       <div class="grp"><h3>⏱ 장면 길이 <small>0.1초 단위</small></h3>${lenBox(c)}</div>`;
+    } else if (c.kind === 'image') h += c.blank ? '' : `<div class="grp"><h3>⏱ 보여 줄 시간 <small>0.1초 단위</small></h3>${range('dur', c.dur, .5, 30, .1, '초')}${lenBox(c)}<button type="button" data-a="alldur" class="sec">모든 사진을 ${(+c.dur).toFixed(1)}초로</button></div>`;
+    else h += `<div class="grp"><h3>⏱ 카드 시간</h3>${range('dur', c.dur, 1, 20, .1, '초')}${lenBox(c)}<p class="hint">카드 글자는 <b>🏷 정보</b> 탭에서 고쳐요.</p><button type="button" data-a="goinfo" class="sec">🏷 정보 탭 열기</button></div>`;
     if (c.kind !== 'card') h += `<div class="grp"><h3>🖼 화면에 맞추기</h3>${chips('fit', { auto: '자동 (흐린 배경)', cover: '꽉 채우기', contain: '전체 보이기 (검은 배경)' }, c.fit)}<button type="button" data-a="focus" class="sec">📍 ${FOCUS ? '화면을 눌러 주세요…' : '보일 중심 맞추기 (얼굴이 잘릴 때)'}</button></div>`;
     h += `<div class="grp"><h3>🔀 넘어가는 효과 <small>이 장면이 시작될 때</small></h3>${chips('trans', Object.assign({ auto: '추천' }, TRANS), c.trans)}<button type="button" data-a="alltrans" class="sec">모든 장면에 같게</button></div>`;
   }
@@ -465,9 +597,10 @@ function blankBox() {
   const B = blanks(), bd = P.blankDur || 4, c = cur();
   let h = `<div class="grp blkbox"><h3 style="margin-top:0">⬜ 빈 장면으로 자리 맞추기</h3>
     <p class="hint" style="margin-top:0">사진이 가사와 <b>어긋나기 시작하는 곳</b>에 보라 동그라미(재생 위치)를 멈추고 누르세요. <b>앞은 그대로</b>, 뒤 사진들은 빈 장면 길이만큼 뒤로 밀려요. 끝까지 맞춘 다음 빈칸에 사진을 넣어요.</p>
-    <h4>빈 장면 길이</h4>${chips('blankdur', [['1', '1초'], ['2', '2초'], ['3', '3초'], ['4', '4초'], ['5', '5초'], ['8', '8초']], bd)}
+    <h4>빈 장면 길이 <small>넣은 다음 0.1초 단위로 고칠 수 있어요</small></h4>${chips('blankdur', [['1', '1초'], ['2', '2초'], ['3', '3초'], ['4', '4초'], ['5', '5초'], ['8', '8초']], bd)}
     <button type="button" data-a="blankins" class="pri" style="width:100%;padding:14px 8px;font-size:1.05rem">⬜ 지금 위치(<span id="blkT">${fmtS(T)}</span>)에 빈 장면 넣기</button>`;
-  if (B.length) h += `<p style="margin:10px 0 4px">빈 장면 <b>${B.length}개</b> 남았어요</p><div class="btns2"><button type="button" data-a="blanknext" class="sec">➡ 다음 빈칸으로 가기</button><button type="button" data-a="blankdelall" class="dg" style="margin-top:0">🗑 빈칸 전부 지우기</button></div>`;
+  if (B.length) { const R = blankRuns(); h += `<p style="margin:10px 0 4px">빈 장면 <b>${B.length}개</b> 남았어요</p><div class="btns2"><button type="button" data-a="blanknext" class="sec">➡ 다음 빈칸으로 가기</button><button type="button" data-a="blankdelall" class="dg" style="margin-top:0">🗑 빈칸 전부 지우기</button></div>${R.length ? `<button type="button" data-a="bmergeall" class="sec" style="width:100%;margin-top:8px">🔗 붙어 있는 빈칸 전부 합치기 (${R.map(([lo, hi]) => `${hi - lo + 1}개 → ${runLen(lo, hi).toFixed(1)}초`).join(' · ')})</button>` : ''}`; }
+  h += `<p class="hint" style="margin:8px 0 0">💡 빈칸 길이를 노래에 딱 맞추려면: 미리보기 아래 「뒤 장면」을 <b>B 같이</b>로 → ▶ 들으며 빈칸이 끝나야 할 곳에서 ⏸ → <b>✂️ 여기서 끝</b> (뒤 사진이 함께 따라와요)</p>`;
   h += '</div>';
   if (c && c.blank) h += blankFill(c);
   return h;
@@ -475,12 +608,38 @@ function blankBox() {
 function blankFill(c) {
   const ms = mediaSrcs();
   return `<div class="grp blkbox" style="border-style:solid"><h3 style="margin-top:0">🖼 장면 ${SEL + 1} 빈칸 채우기 <small>${clipLen(c).toFixed(1)}초 · 시간은 그대로</small></h3>
-    ${range('dur', c.dur, .5, 15, .1, '빈칸 길이 초')}
+    ${range('dur', c.dur, .5, 30, .1, '빈칸 길이 초')}${lenBox(c)}
+    ${(() => { const [lo, hi] = blankRun(SEL); return hi > lo ? `<button type="button" data-a="bmerge" class="pri" style="width:100%;margin-top:8px">🔗 붙어 있는 빈칸 ${hi - lo + 1}개 합치기 → ${runLen(lo, hi).toFixed(1)}초 한 장면</button><p class="hint" style="margin:4px 0 0">${P.clips.slice(lo, hi + 1).map(x => clipLen(x).toFixed(1) + '초').join(' + ')} = ${runLen(lo, hi).toFixed(1)}초 · 합쳐도 뒤 사진 시간은 그대로예요</p>` : ''; })()}
     <div class="btns2"><label class="btnf">📷 갤러리에서 새 사진<input type="file" data-a="blankf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 폴더(내 파일)에서<input type="file" data-a="blankf" multiple hidden></label></div>
     <p class="hint">여러 장을 고르면 이 빈칸부터 <b>다음 빈칸들에 차례로</b> 들어가요.</p>
     <h4>넣어 둔 사진에서 고르기</h4>
     <div class="ggrid">${ms.map(id => { const sm = P.srcs.find(s => s.id === id); return `<button type="button" class="gbtn" data-a="blanksel" data-v="${id}"><span data-gth="${id}"></span><small>${esc(sm ? sm.code : '')}${sm && sm.kind === 'video' ? ' 🎞' : ''}</small></button>`; }).join('')}</div>
+    <h4>사진을 새로 안 넣고 옆 장면을 늘리기</h4><div class="btns2"><button type="button" data-a="bjoin" data-v="-1">◀ 앞 장면에 붙이기</button><button type="button" data-a="bjoin" data-v="1">뒤 장면에 붙이기 ▶</button></div>
+    <p class="hint" style="margin:4px 0 0">빈칸 시간만큼 옆 장면이 길어지고 빈칸은 없어져요 (나머지 장면 시간은 그대로)</p>
     <button type="button" data-a="del" class="dg">🗑 이 빈칸 지우기 (뒤 사진이 다시 당겨져요)</button></div>`;
+}
+/* 🔗 빈칸 합치기 · 옆 장면에 붙이기 */
+function blankRun(i) { let lo = i, hi = i; while (lo > 0 && P.clips[lo - 1].blank) lo--; while (hi < P.clips.length - 1 && P.clips[hi + 1].blank) hi++; return [lo, hi]; }
+function blankRuns() { const R = []; for (let i = 0; i < P.clips.length; i++) if (P.clips[i].blank) { const [lo, hi] = blankRun(i); if (hi > lo) R.push([lo, hi]); i = hi; } return R; }
+const runLen = (lo, hi) => { let s = 0; for (let j = lo; j <= hi; j++) s += clipLen(P.clips[j]); return r2(s); };
+function mergeRun(lo, hi) { const k = P.clips[lo], s = runLen(lo, hi); k.dur = s; P.clips.splice(lo + 1, hi - lo); if (SEL > lo && SEL <= hi) SEL = lo; else if (SEL > hi) SEL -= hi - lo; return s; }
+function blankMerge() {
+  const c = cur(); if (!c || !c.blank) return; const [lo, hi] = blankRun(SEL); if (hi === lo) return toast('바로 옆에 붙은 빈칸이 없어요');
+  const n = hi - lo + 1, s = mergeRun(lo, hi); SEL = lo; T = timeline(P).st[lo] + .02;
+  commit(); renderPanel(); drawNow(); toast(`🔗 빈칸 ${n}개를 ${s.toFixed(1)}초 한 장면으로 합쳤어요 · 시간은 그대로예요`, 4000);
+}
+function blankMergeAll() {
+  const R = blankRuns(); if (!R.length) return toast('붙어 있는 빈칸이 없어요'); let n = 0;
+  for (let k = R.length - 1; k >= 0; k--) { mergeRun(R[k][0], R[k][1]); n += R[k][1] - R[k][0] + 1; }
+  commit(); renderPanel(); drawNow(); toast(`🔗 붙어 있던 빈칸 ${n}개를 ${R.length}개 장면으로 합쳤어요 · 시간은 그대로예요`, 4000);
+}
+function blankJoin(dir) {   // 빈칸을 없애고 그 시간을 옆 장면에 붙이기 (나머지 장면 시간은 그대로)
+  const c = cur(); if (!c || !c.blank) return; const j = SEL + dir, nb = P.clips[j];
+  if (!nb) return toast(dir < 0 ? '앞 장면이 없어요' : '뒤 장면이 없어요');
+  if (nb.blank) return toast('옆도 빈칸이에요 · 「🔗 빈칸 합치기」를 써 주세요');
+  const L = clipLen(nb) + clipLen(c); if (dir < 0) setLenBack(nb, L); else setLenFront(nb, L);
+  P.clips.splice(SEL, 1); SEL = dir < 0 ? j : SEL; T = timeline(P).st[SEL] + .02;
+  commit(); renderPanel(); drawNow(); toast(`${dir < 0 ? '◀ 앞' : '뒤 ▶'} 장면을 ${clipLen(P.clips[SEL]).toFixed(1)}초로 늘리고 빈칸을 없앴어요`, 4000);
 }
 function splitAt(i, lt) {   // 장면 i를 lt초에서 둘로 나누기 → 뒤 조각은 i+1
   const c = P.clips[i], d = JSON.parse(JSON.stringify(c)); d.id = uid('c'); d.cap = { t: '' }; d.stk = []; d.vo = null;
@@ -885,7 +1044,7 @@ $('panel').addEventListener('input', e => {
   if (a === 'cap' && c) { c.cap.t = v; autoGrow(el); drawNow(); return; }
   if (a === 'in' && c) { c.in = Math.min(+v, c.out - .2); out.textContent = fmt(c.in); T = timeline(P).st[SEL] + .01; drawNow(); return; }
   if (a === 'out' && c) { c.out = Math.max(+v, c.in + .2); out.textContent = fmt(c.out); T = timeline(P).st[SEL] + clipLen(c) - (c.hold || 0) - .05; drawNow(); return; }
-  if (a === 'dur' && c) { c.dur = +v; drawNow(); return; }
+  if (a === 'dur' && c) { setEnd(SEL, timeline(P).st[SEL] + +v); drawNow(); return; }
   if (a === 'vol' && c) { c.vol = +v; return; } if (a === 'mvol') { P.music.vol = +v; return; } if (a === 'cvol') { P.clipVol = +v; return; } if (a === 'vovol' && c && c.vo) { c.vo.vol = +v; return; }
   if (a === 'size') { P.capDef.size = +v; drawNow(); return; } if (a === 'csize' && c) { c.cap.size = +v; drawNow(); return; }
   if (a === 'ss' && c && SELOV) { c.stk[SELOV.k].s = +v; drawNow(); return; } if (a === 'sv' && c && SELOV) { c.stk[SELOV.k].v = v; drawNow(); return; }
@@ -918,6 +1077,10 @@ $('panel').addEventListener('click', async e => {
     case 'blankins': return blankIns();
     case 'blanknext': { const B = blanks(); if (!B.length) return toast('빈칸이 없어요'); const j = B.find(i => i > SEL); return select(j != null ? j : B[0], true); }
     case 'blankdelall': { const B = blanks(); if (!B.length || !confirm2(`빈 장면 ${B.length}개를 전부 지울까요?\n(뒤 사진들이 다시 앞으로 당겨져요 · ↩️ 되돌리기 가능)`)) return; P.clips = P.clips.filter(x => !x.blank); SEL = Math.min(SEL, P.clips.length - 1); T = Math.min(T, timeline(P).total); toast('🗑 빈칸을 전부 지웠어요'); return re(); }
+    case 'lenn': return lenNudge(+v);
+    case 'bmerge': return blankMerge();
+    case 'bmergeall': return blankMergeAll();
+    case 'bjoin': return blankJoin(+v);
     case 'blanksel': { if (!c || !c.blank) return; if (blankFillWith(c, v)) blankAfterFill(1); return; }
     case 'del': { if (!c) return; P.clips.splice(SEL, 1); SEL = Math.min(SEL, P.clips.length - 1); T = Math.min(T, timeline(P).total); toast('🗑 지웠어요 (↩️ 되돌리기 가능)'); return re(); }
     case 'nin': if (c) { c.in = clamp(c.in + +v, 0, c.out - .2); T = st[SEL] + .01; makeThumbs(); return re(); } return;
