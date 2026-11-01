@@ -1,11 +1,45 @@
 /*! bkguard.js — BK 가족 앱 공용: 휴대폰 ◁(뒤로 가기) 확인창 + 쓰던 내용 자동 저장 · 이어서 하기
  *  - 글을 쓰거나 고른 뒤 ◁ 를 누르면: 💾 저장하고 나가기 / 🚪 그냥 나가기 / ✏️ 계속 쓰기
  *  - 쓰는 동안 이 휴대폰에 자동 저장 → 다시 열면 「✏️ 쓰던 내용 이어서 하기」
+ *  - 글 쓰는 칸마다 「✕ 지우기」 (실수하면 4초 안에 「↩ 되살리기」)
  *  - 화면별 설정: window.BKGUARD_CFG = { noForm, onBack(), isDirty(), save(), exit(), msg, saveLabel }
  */
 (function () {
   'use strict';
   if (window.BKGUARD) return;
+
+  // ───────── ✕ 지우기: 글 쓰는 칸을 누르면 오른쪽 위에 「✕ 지우기」 → 한 번에 싹 / 4초 안에 「↩ 되살리기」 ─────────
+  (function () {
+    if (window.BKCLEAR) return; window.BKCLEAR = 1;
+    var OK = /^(text|search|tel|url|email|)$/i, btn = null, cur = null, undo = null, undoT = 0;
+    function okEl(el) { if (!el || el.disabled || el.readOnly) return false; if (el.tagName === 'TEXTAREA') return true; return el.tagName === 'INPUT' && OK.test(el.getAttribute('type') || '') && !el.hasAttribute('data-noclear'); }
+    function mk() {
+      btn = document.createElement('button'); btn.type = 'button'; btn.className = 'bkclr'; btn.setAttribute('aria-label', '칸 비우기');
+      var st = document.createElement('style'); st.textContent = '.bkclr{position:fixed;z-index:2147482000;display:none;padding:4px 10px;border-radius:999px;border:0;background:rgba(220,38,38,.92);color:#fff;font:800 13px/1.4 "Noto Sans KR",system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;-webkit-tap-highlight-color:transparent}.bkclr.undo{background:rgba(23,71,130,.95)}';
+      document.head.appendChild(st); document.body.appendChild(btn);
+      btn.addEventListener('pointerdown', function (e) { e.preventDefault(); });   // 칸에서 손을 떼도 글쓰기가 그대로
+      btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      btn.addEventListener('click', function (e) {
+        e.preventDefault(); e.stopPropagation(); if (!cur) return;
+        if (undo != null && !cur.value) { set(cur, undo); undo = null; place(); return; }
+        if (!cur.value) return; undo = cur.value; set(cur, ''); clearTimeout(undoT); undoT = setTimeout(function () { undo = null; place(); }, 4000); place();
+      });
+    }
+    function set(el, v) { el.value = v; try { el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) { } try { el.focus(); } catch (e) { } }
+    function place() {
+      if (!btn) return; var el = cur;
+      if (!el || !document.contains(el) || (!el.value && undo == null)) { btn.style.display = 'none'; return; }
+      var r = el.getBoundingClientRect(); if (r.width < 60 || r.bottom < 0 || r.top > innerHeight) { btn.style.display = 'none'; return; }
+      var u = !el.value && undo != null; btn.textContent = u ? '↩ 되살리기' : '✕ 지우기'; btn.classList.toggle('undo', u); btn.style.display = 'block';
+      var bw = btn.offsetWidth || 70, bh = btn.offsetHeight || 24, tall = el.tagName === 'TEXTAREA' || r.height > 60;
+      btn.style.left = Math.max(4, r.right - bw - 6) + 'px'; btn.style.top = (tall ? r.top + 6 : r.top + (r.height - bh) / 2) + 'px';
+    }
+    document.addEventListener('focusin', function (e) { if (okEl(e.target)) { if (!btn) mk(); if (cur !== e.target) undo = null; cur = e.target; place(); } });
+    document.addEventListener('focusout', function (e) { if (e.target === cur) setTimeout(function () { if (document.activeElement !== cur) { cur = null; undo = null; place(); } }, 150); });
+    document.addEventListener('input', function (e) { if (e.target === cur) { if (cur.value) undo = null; place(); } }, true);
+    window.addEventListener('scroll', place, true); window.addEventListener('resize', place);
+    if (window.visualViewport) { visualViewport.addEventListener('resize', place); visualViewport.addEventListener('scroll', place); }
+  })();
   var parts = location.pathname.split('/').filter(Boolean), repo = parts[0] || '', file = (parts[1] || 'index.html').replace(/\.html?$/i, '') || 'index';
   /* 따로 처리하는 화면: 첫 메뉴 · 라이선스 화면 · 가계부(자체 뒤로 가기 + 바로 저장) · BK프롬(관리자 전용) */
   var OFF = { 'bk-card/index': 1, 'bk-card/license': 1, 'bk-card/activate': 1, 'bk-card/garyebu': 1, 'bk-prom/index': 1 };
@@ -103,15 +137,15 @@
   function start() { setTimeout(offerRestore, 700); var c = C(); if (c.autoArm && c.autoArm()) arm(); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 
-  // ───────── BK톡톡 인사 카드: AI가 만든 그림에 글씨 올리기 (관리자 미리보기) ─────────
+  // ───────── BK톡톡 인사 카드: AI가 만든 그림에 글씨 올리기 ─────────
   var ADMIN = ls('bkAdmin') === '1';
-  if (repo === 'bk-card' && ADMIN && /^(card|event|faith)$/.test(file)) {
+  if (repo === 'bk-card' && /^(card|event|faith)$/.test(file)) {
     var add = function () {
       if (document.getElementById('bkgImport')) return;
       var main = document.querySelector('main'); if (!main) return;
       var sec = document.createElement('section'); sec.id = 'bkgImport'; sec.setAttribute('data-nosave', '');
       sec.style.cssText = 'margin:18px 0;padding:16px;border-radius:18px;background:#fff;border:2px dashed #f2c14e;font-family:"Noto Sans KR",sans-serif';
-      sec.innerHTML = '<h2 style="margin:0 0 6px;font-size:1.15rem;color:#174782">✏️ 완성 그림에 글씨 올리기 · 고치기 <em style="font-style:normal;font-size:.75rem;background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px">🛠 관리자 미리보기</em></h2>' +
+      sec.innerHTML = '<h2 style="margin:0 0 6px;font-size:1.15rem;color:#174782">✏️ 완성 그림에 글씨 올리기 · 고치기</h2>' +
         '<p style="margin:0 0 10px;color:#475569;font-size:.92rem;line-height:1.55">AI가 만들어 준 카드 그림을 고르면, 그 위에 <b>글씨 · 스티커 · 원형 사진 + 명함</b>을 손가락으로 옮기며 넣고 ✎로 고칠 수 있어요. 움직이는 효과 · 음악을 넣어 영상으로도 보낼 수 있어요.</p>' +
         '<label style="display:block;text-align:center;padding:15px;border-radius:14px;background:#174782;color:#fff;font-weight:800;cursor:pointer">🖼️ AI가 만든 그림 고르기<input type="file" accept="image/*" hidden></label>';
       var guide = Array.prototype.find.call(main.querySelectorAll('h2'), function (h) { return /사용법/.test(h.textContent); });

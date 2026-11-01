@@ -424,7 +424,7 @@ function lyrBox() {
   }
   h += `<textarea data-a="lyr" rows="5" placeholder="가사를 붙여넣으세요 (한 줄에 한 마디)\n시간이 있으면 그대로 써요: [00:15] 첫 줄 가사\n[Verse] · [후렴] 같은 표시는 자동으로 빠져요">${esc(Ly.raw || '')}</textarea>
     <div class="btns2"><button type="button" data-a="lyrset" class="pri">✅ 가사 넣기</button><button type="button" data-a="lyrai">🤖 Gemini로 가사 · 시간 받기</button></div>
-    <p class="hint">🤖 버튼을 누르면 요청 글이 복사되고 Gemini가 열려요 → <b>＋로 이 MP3 파일을 올리고</b> 붙여넣기 → 나온 가사를 통째로 복사해서 위 칸에 붙여넣고 ✅. 가사를 이미 알면(수노 등) 그 가사를 같이 붙여넣으면 더 정확해요.</p>`;
+    <p class="hint">🤖 <b>수노 가사를 먼저 위 칸에 붙여넣고</b> 버튼을 누르면 요청 글(가사 포함)이 복사되고 Gemini가 열려요.<br>Gemini에서 <b>① 아래 ＋ → 파일 → 이 MP3를 꼭 먼저 올리고</b> ② 입력칸을 길게 눌러 붙여넣기 ③ 보내기 → 시간이 붙은 가사를 통째로 복사해서 위 칸에 붙여넣고 ✅.<br>⚠️ MP3를 안 올리면 「파일이 보이지 않습니다」라고 해요. 그래도 안 해 주면 <b>👆 톡톡 맞추기</b>가 가장 확실해요.</p>`;
   if (n) {
     h += `<p>✅ 가사 <b>${n}줄</b> · ${Ly.timed ? '시간 맞춤' : '고르게 나눔'}</p>
       <div class="chips"><button type="button" data-a="lyron" data-v="1"${pressed(!!on, true)}>🎤 자막 켜기</button><button type="button" data-a="lyron" data-v="0"${pressed(!!on, false)}>끄기</button></div>
@@ -441,7 +441,7 @@ function lyrCmd(a, v) {
   const mf = musFile(); if (!mf) return toast('먼저 📁 내 음악 파일을 넣어 주세요');
   P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; const Ly = P.lyrics;
   if (a === 'lyrset') { const r = lyrParse(Ly.raw); if (!r.lines.length) return toast('가사를 먼저 붙여넣어 주세요'); Ly.lines = r.lines; Ly.timed = r.timed; if (!r.timed) lyrSpread(Ly.lines, mf.dur); Ly.lines.sort((p, q) => p.t - q.t); Ly.on = 1; commit(); renderPanel(); return toast(r.timed ? `🎤 가사 ${Ly.lines.length}줄을 시간에 맞춰 넣었어요 · ▶로 확인해 보세요` : `🎤 가사 ${Ly.lines.length}줄을 고르게 나눴어요 · 「👆 톡톡 맞추기」로 정확히 맞출 수 있어요`, 4500); }
-  if (a === 'lyrai') { const t = '첨부한 노래(MP3)의 가사를 들리는 대로 받아 적어 주세요.\n- 한 줄씩 나눠서, 줄마다 맨 앞에 그 줄을 부르기 시작하는 시간을 [분:초] 형식으로 붙여 주세요. 예: [00:15] 첫 줄 가사\n- 반주만 나오는 부분(간주)은 쓰지 마세요.\n- 한 줄은 화면 자막에 맞게 15자 안팎으로 짧게 나눠 주세요.\n- 다른 설명 없이 시간과 가사만 써 주세요.' + (Ly.raw && Ly.raw.trim() ? '\n\n아래는 원래 가사예요. 이 글자 그대로 쓰고 시간만 맞춰 주세요:\n' + Ly.raw.trim() : ''); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('📋 복사했어요 · Gemini에서 ＋로 MP3를 올리고 붙여넣으세요', 4500)).catch(() => {}); setTimeout(() => g.open('https://gemini.google.com/app', '_blank'), 300); return; }
+  if (a === 'lyrai') { const t = '(이 메시지와 함께 제가 만든 노래 MP3 파일을 첨부했어요)\n첨부한 노래(MP3)의 가사를 들리는 대로 받아 적어 주세요.\n- 한 줄씩 나눠서, 줄마다 맨 앞에 그 줄을 부르기 시작하는 시간을 [분:초] 형식으로 붙여 주세요. 예: [00:15] 첫 줄 가사\n- 반주만 나오는 부분(간주)은 쓰지 마세요.\n- 한 줄은 화면 자막에 맞게 15자 안팎으로 짧게 나눠 주세요.\n- 다른 설명 없이 시간과 가사만 써 주세요.' + (Ly.raw && Ly.raw.trim() ? '\n\n아래는 원래 가사예요. 이 글자 그대로 쓰고 시간만 맞춰 주세요:\n' + Ly.raw.trim() : ''); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('📋 복사했어요 · Gemini에서 ① ＋로 MP3 먼저 올리기 ② 붙여넣기 ③ 보내기', 6000)).catch(() => {}); setTimeout(() => g.open('https://gemini.google.com/app', '_blank'), 300); return; }
   if (a === 'lyron') { Ly.on = +v; commit(); renderPanel(); return; }
   if (a === 'lyreven') { lyrSpread(Ly.lines, mf.dur); Ly.timed = 0; commit(); renderPanel(); return toast('↔ 고르게 나눴어요'); }
   if (a === 'lyrshift') { Ly.lines.forEach(x => { x.t = Math.max(0, Math.round((x.t + +v) * 10) / 10); }); commit(); renderPanel(); return; }
