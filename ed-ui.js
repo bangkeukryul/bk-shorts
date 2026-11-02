@@ -2,7 +2,7 @@
 (function (g) {
 'use strict';
 const ED = g.ED, { $, sleep, clamp, uid, esc, fmt, fmtS, PURPOSE, CAPS, CAP_ANIMS, COLORS, FILTERS, EFX, TRANS, KB, EMOJI, BADGES, SFX, RATIOS, SRC, IDB, clipLen, timeline, clipAt, srcTime, eff } = ED;
-let P = null, SEL = -1, T = 0, TAB = 'edit', PLAY = false, SELOV = null, FOCUS = false, startPurpose = 'meet', startRatio = '', aiMode = 'all', aiTone = '', aiLen = '1분', aiExtra = '', sheets = [], results = [];
+let P = null, SEL = -1, T = 0, TAB = 'scene', PLAY = false, SELOV = null, FOCUS = false, startPurpose = 'meet', startRatio = '', aiMode = 'all', aiTone = '', aiLen = '1분', aiExtra = '', sheets = [], results = [];
 const FONTS = ['noto', 'blackhan', 'dohyeon', 'jua', 'gowundodum', 'gowunbatang', 'nanummyeongjo', 'nanumpen', 'nanumbrush', 'gaegu', 'gamja', 'himelody', 'songmyung'];
 ED.thumbs = new Map();
 
@@ -44,7 +44,7 @@ $('fStart').addEventListener('change', async e => {
   hist = []; hi = -1; SEL = -1; T = 1.2;
   showEditor();
   await addFiles(fs, 1);
-  commit(); TAB = 'edit'; renderPanel();
+  commit(); setTab('scene');
   toast(`🤖 「AI」 탭에서 자르기 · 자막을 한 번에 맡길 수 있어요`, 4500);
 });
 /* 📁 내 파일에서 고르기: 사진 고르기 화면 대신 「내 파일 · 다운로드」 목록으로 열림 → 사진 · 동영상만 골라서 위와 똑같이 */
@@ -229,10 +229,53 @@ function moveTo(i, pos) {
 }
 /* 아래에서 올라오는 작은 창 */
 function sheet(html) {
-  let el = $('edSheet'); if (!el) { el = document.createElement('div'); el.id = 'edSheet'; el.className = 'edsheet'; document.body.appendChild(el); el.addEventListener('click', sheetClick); el.addEventListener('input', sheetInput); }
+  let el = $('edSheet'); if (!el) { el = document.createElement('div'); el.id = 'edSheet'; el.className = 'edsheet'; document.body.appendChild(el); el.addEventListener('click', sheetClick); el.addEventListener('change', sheetChange); el.addEventListener('input', sheetInput); }
   el.innerHTML = `<div class="shbg" data-s="close"></div><div class="shbox">${html}</div>`; el.hidden = false; fillThumbs(el);
 }
 function sheetClose() { const el = $('edSheet'); if (el) el.hidden = true; SHX = null; }
+/* 🗂 서랍에서 빼기 · 다시 넣기 */
+const trayHidden = id => (P.trayHide || []).includes(id);
+function useCount(id) { return P.clips.filter(c => c.src === id).length; }
+function trayMenu(id) {
+  const m = P.srcs.find(s => s.id === id); if (!m) return; SHX = { src: id };
+  sheet(`<div class="shh"><span class="shth" data-gth="${id}"></span><div><b>🗂 서랍 · ${esc(m.code)}</b><small>${m.kind === 'video' ? '🎞 동영상' : '🖼 사진'} · 영상에 ${useCount(id)}번 씀</small></div></div>
+    <button type="button" data-s="twhere" class="pri">📍 몇 번과 몇 번 사이에 넣기</button>
+    <button type="button" data-s="thide">🙈 서랍에서 빼기 <small>서랍만 깔끔하게 · 영상에 들어간 장면은 그대로</small></button>
+    <button type="button" data-s="close" class="cl">닫기</button>`);
+}
+function trayFlash(id) {
+  if (TAB !== 'scene') return; renderPanel();
+  const el = $('panel').querySelector(`.trs [data-v="${id}"]`); if (!el) return;
+  el.classList.add('flash'); el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); setTimeout(() => el.classList.remove('flash'), 2200);
+}
+/* 🔄 다른 사진으로 바꾸기 (시간 · 글씨 · 효과는 그대로) */
+function swapSrc(c, id) {
+  const m = P.srcs.find(s => s.id === id), s = SRC.get(id); if (!m || !s) return false;
+  const d = clipLen(c); delete c.blank; c.src = id; c.fx = .5; c.fy = .5;
+  if (m.kind === 'video') { c.kind = 'video'; c.speed = c.speed || 1; c.in = 0; c.out = r2(Math.min(s.dur, d * c.speed)); c.hold = r2(Math.max(0, d - c.out / c.speed)); if (c.vol == null) c.vol = 1; if (c.mute == null) c.mute = 0; }
+  else { c.kind = 'image'; c.dur = r2(d); c.speed = 1; c.in = 0; c.out = 0; c.hold = 0; if (!c.kb || c.kb === 'none') c.kb = 'auto'; }
+  return true;
+}
+function swapSheet(cid) {
+  const c = P.clips.find(x => x.id === cid); if (!c) return; SHX = { id: cid };
+  const i = P.clips.indexOf(c), ids = P.srcs.filter(s => s.kind !== 'audio' && SRC.has(s.id) && !trayHidden(s.id)).map(s => s.id);
+  sheet(`<div class="shh"><span class="shth" data-gth="${c.src || ''}"></span><div><b>🔄 ${i + 1}번 장면 ${c.blank ? '빈칸에 사진 넣기' : '사진 바꾸기'}</b><small>${clipLen(c).toFixed(1)}초 · 시간 · 글씨 · 효과는 그대로, 사진만 바뀌어요</small></div></div>
+    <h4 style="margin:10px 0 4px">🗂 서랍에서 고르기</h4><div class="ggrid">${ids.map(id => { const m = P.srcs.find(s => s.id === id); return `<button type="button" class="gbtn${id === c.src ? ' on' : ''}" data-s="swapto" data-v="${id}"><span data-gth="${id}"></span><small>${esc(m.code)}${m.kind === 'video' ? ' 🎞' : ''}</small></button>`; }).join('')}</div>
+    <div class="btns2" style="margin-top:10px"><label class="btnf">📷 갤러리에서<input type="file" data-s="swapf" accept="image/*,video/*" hidden></label><label class="btnf">📁 폴더(내 파일)에서<input type="file" data-s="swapf" hidden></label></div>
+    <p class="hint" style="margin:4px 0 0">새로 고른 사진은 서랍에도 담겨요.</p>
+    <button type="button" data-s="close" class="cl">취소</button>`);
+}
+function swapDone(c, id) {
+  if (!swapSrc(c, id)) return toast('사진을 열 수 없어요');
+  const i = P.clips.indexOf(c); SEL = i; T = timeline(P).st[i] + .02;
+  commit(); makeThumbs(); renderPanel(); drawNow(); toast(`🔄 ${i + 1}번 장면을 ${srcCode(id)}(으)로 바꿨어요 · ${clipLen(c).toFixed(1)}초 그대로`, 4000);
+}
+async function sheetChange(e) {
+  const el = e.target; if (el.dataset.s !== 'swapf') return; const fs = Array.from(el.files || []); el.value = ''; if (!fs.length) return;
+  const X = SHX, c = X && P.clips.find(x => x.id === X.id); sheetClose(); if (!c) return;
+  const n0 = P.clips.length, n = await addFiles(fs.slice(0, 1), n0); if (!n) return; const nc = P.clips.splice(n0)[0];
+  swapDone(c, nc.src);
+}
 function clipMenu(i) {
   const c = P.clips[i]; if (!c || c.kind === 'card') return; SEL = i; renderTL();
   SHX = { i, id: c.id };
@@ -240,6 +283,8 @@ function clipMenu(i) {
     ${c.blank ? '' : `<button type="button" data-s="copy" class="pri">📄 복사하기 <small>빨간 커서를 옮긴 뒤 「📋 붙여넣기」</small></button>
     <button type="button" data-s="where" data-v="copy">📍 한 번 더 넣기 — 몇 번과 몇 번 사이에</button>`}
     ${c.pin ? '' : `<button type="button" data-s="where" data-v="move">↔ 이 장면 옮기기 — 몇 번과 몇 번 사이로</button>`}
+    <button type="button" data-s="swap">${c.blank ? '🖼 이 빈칸에 사진 넣기' : '🔄 다른 사진으로 바꾸기 <small>시간 · 글씨 · 효과는 그대로</small>'}</button>
+    ${c.blank ? '' : `<button type="button" data-s="totray">🗂 서랍에 넣기</button>`}
     <button type="button" data-s="del" class="dg">🗑 이 장면 지우기</button><button type="button" data-s="close" class="cl">닫기</button>`);
 }
 function whereSheet(ctx) {   // ctx: { mode:'copy'|'move'|'src', i, id, src }
@@ -258,8 +303,15 @@ function sheetClick(e) {
   if (k === 'close') return sheetClose();
   if (k === 'n') { const n = $('shN'), [lo, hi] = movRange(); n.value = clamp((parseInt(n.value, 10) || 0) + +v, lo, hi + 1); return sheetInput({ target: n }); }
   if (!X) return sheetClose();
+  if (k === 'twhere') return whereSheet({ mode: 'src', src: X.src });
+  if (k === 'thide') { P.trayHide = Array.from(new Set([...(P.trayHide || []), X.src])); sheetClose(); commit(); renderPanel(); return toast(`🙈 ${srcCode(X.src)}을 서랍에서 뺐어요 · 다시 넣으려면 사진 줄에서 꾹 → 「🗂 서랍에 넣기」`, 4500); }
   const i = X.id ? P.clips.findIndex(c => c.id === X.id) : -1, c = P.clips[i];
   if (k === 'copy') { if (!c) return sheetClose(); CLIPB = { j: JSON.stringify(c), code: srcCode(c.src), src: c.src }; sheetClose(); renderPaste(); return toast(`📄 ${CLIPB.code}을 복사했어요 · 빨간 커서를 넣을 곳에 두고 「📋 붙여넣기」`, 4500); }
+  if (k === 'swap') { if (!c) return sheetClose(); return swapSheet(c.id); }
+  if (k === 'swapto') { if (!c) return sheetClose(); sheetClose(); return swapDone(c, v); }
+  if (k === 'totray') { if (!c || !c.src) return sheetClose(); sheetClose(); const id = c.src;
+    if (trayHidden(id)) { P.trayHide = P.trayHide.filter(x => x !== id); commit(); toast(`🗂 ${srcCode(id)}을 서랍에 넣었어요`); } else toast(`🗂 ${srcCode(id)}은 이미 서랍에 있어요 · 영상에 ${useCount(id)}번 씀`, 3500);
+    return trayFlash(id); }
   if (k === 'where') { if (!c) return sheetClose(); return whereSheet({ mode: v, id: c.id }); }
   if (k === 'del') { if (!c) return sheetClose(); sheetClose(); P.clips.splice(i, 1); SEL = Math.min(i, P.clips.length - 1); T = Math.min(T, timeline(P).total); commit(); renderPanel(); return toast('🗑 지웠어요 (↩️ 되돌리기 가능)'); }
   if (k === 'put') {
@@ -282,11 +334,11 @@ $('pastebar').addEventListener('click', e => {
 });
 /* 🗂 사진 서랍 (✂️ 편집 탭 맨 위) */
 function trayBox() {
-  const ids = P.srcs.filter(s => s.kind !== 'audio' && SRC.has(s.id)).map(s => s.id), use = {};
+  const all = P.srcs.filter(s => s.kind !== 'audio' && SRC.has(s.id)).map(s => s.id), ids = all.filter(id => !trayHidden(id)), nh = all.length - ids.length, use = {};
   P.clips.forEach(c => { if (c.src) use[c.src] = (use[c.src] || 0) + 1; });
-  return `<div class="grp tray"><h3 style="margin-top:0">🗂 사진 서랍 <small>${ids.length}장 · 톡 = 빨간 커서 자리에 넣기 · 꾹 = 몇 번 사이에</small></h3>
+  return `<div class="grp tray"><h3 style="margin-top:0">🗂 사진 서랍 <small>${ids.length}장 · 톡 = 빨간 커서 자리에 넣기 · 꾹 = 몇 번 사이에 · 빼기</small></h3>
     <div class="trs">${ids.map(id => { const m = P.srcs.find(s => s.id === id); return `<button type="button" class="gbtn" data-a="trayput" data-v="${id}" data-lp="tray"><span data-gth="${id}"></span>${use[id] ? `<i>${use[id]}번 씀</i>` : '<i class="nu">안 씀</i>'}<small>${esc(m.code)}${m.kind === 'video' ? ' 🎞' : ''}</small></button>`; }).join('') || '<p class="hint">아직 담은 사진이 없어요</p>'}</div>
-    <p class="hint" style="margin:6px 0 0">지금 넣으면 → <b id="trayAt">${between(nearPos())}</b></p>
+    <p class="hint" style="margin:6px 0 0">지금 넣으면 → <b id="trayAt">${between(nearPos())}</b>${nh ? ` · <button type="button" data-a="trayunhide" class="lnk">🙈 뺀 사진 ${nh}장 다시 꺼내기</button>` : ''}</p>
     <div class="btns2"><label class="btnf">📷 갤러리에서 서랍에 담기<input type="file" data-a="trayf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 폴더에서 서랍에 담기<input type="file" data-a="trayf" multiple hidden></label></div>
     <p class="hint" style="margin:4px 0 0">서랍에 담기만 하고 영상에는 아직 안 들어가요. 미리 많이 담아 두고 골라 넣으세요.</p></div>`;
 }
@@ -301,10 +353,10 @@ $('panel').addEventListener('contextmenu', e => { if (e.target.closest('[data-lp
 $('panel').addEventListener('pointerdown', e => {
   PNOCLICK = false; const b = e.target.closest('[data-lp]'); if (!b) return;
   PLP = { b, x: e.clientX, y: e.clientY, t: setTimeout(() => { const L = PLP; PLP = null; if (!L) return; PNOCLICK = true; try { navigator.vibrate && navigator.vibrate(25); } catch (er) { /* 무시 */ }
-    if (L.b.dataset.lp === 'tray') whereSheet({ mode: 'src', src: L.b.dataset.v }); else whereSheet({ mode: 'copy', id: L.b.dataset.v }); }, 480) };
+    if (L.b.dataset.lp === 'tray') trayMenu(L.b.dataset.v); else whereSheet({ mode: 'copy', id: L.b.dataset.v }); }, 480) };
 });
 document.addEventListener('pointermove', e => { if (PLP && Math.hypot(e.clientX - PLP.x, e.clientY - PLP.y) > 10) { clearTimeout(PLP.t); PLP = null; } });
-['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, () => { if (PLP) { clearTimeout(PLP.t); PLP = null; } }));
+['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, () => { if (PLP) { clearTimeout(PLP.t); PLP = null; } if (PNOCLICK) setTimeout(() => { PNOCLICK = false; }, 400); }));
 /* 🔍 미리보기 크게 · 작게 */
 function pvSet(big) { document.body.classList.toggle('pvbig', !!big); const b = $('pvBtn'); if (b) { b.textContent = big ? '🔍 작게' : '🔍 크게'; b.setAttribute('aria-pressed', String(!!big)); } try { localStorage.setItem('bkEdPvBig', big ? '1' : ''); } catch (e) { /* 무시 */ } }
 $('pvBtn').addEventListener('click', () => { pvSet(!document.body.classList.contains('pvbig')); renderTL(); });
@@ -530,7 +582,7 @@ $('cv').addEventListener('pointerdown', e => {
   const o = h.type === 'cap' ? A.c.cap : h.type === 'stk' ? A.c.stk[h.k] : A.c.blur[h.k];
   drag = { o, type: h.type, sx: px, sy: py, ox: h.type === 'cap' ? ED.capInfo(A.c).x : o.x, oy: h.type === 'cap' ? ED.capInfo(A.c).y : o.y, W, H, moved: false };
   $('cv').setPointerCapture(e.pointerId); e.preventDefault();
-  if (h.type === 'cap' && TAB !== 'cap') { TAB = 'cap'; renderTabs(); } else if (h.type !== 'cap' && TAB !== 'stk') { TAB = 'stk'; renderTabs(); }
+  if (TAB !== 'deco') { MODE = 'vid'; TAB = MLAST.vid = 'deco'; renderTabs(); }
   renderPanel(); drawNow();
 });
 $('cv').addEventListener('pointermove', e => {
@@ -542,9 +594,30 @@ $('cv').addEventListener('pointermove', e => {
 $('cv').addEventListener('pointerup', () => { if (drag) { if (drag.moved) commit(); drag = null; } });
 
 /* ═════════ 도구 탭 ═════════ */
-const TABS = [['edit', '✂️', '편집'], ['order', '🧩', '순서'], ['cap', '💬', '자막'], ['stk', '😀', '스티커'], ['fx', '✨', '효과'], ['snd', '🎵', '소리'], ['ai', '🤖', 'AI'], ['info', '🏷', '정보'], ['save', '💾', '저장']];
-function renderTabs() { $('tabs').innerHTML = TABS.map(([k, i, n]) => `<button type="button" data-tab="${k}"${pressed(TAB, k)}><span>${i}</span>${n}</button>`).join(''); }
-$('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (!b) return; TAB = b.dataset.tab; renderTabs(); renderPanel(); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+/* ═════════ 큰 단계 3개: ① 🎬 영상 만들기 · ② 🎤 노래 맞추기 · ③ 💾 마무리 → 아래 탭은 그 단계 것만 ═════════ */
+const MODES = {
+  vid: ['①', '🎬', '영상 만들기', [['scene', '✂️', '장면'], ['order', '🧩', '순서'], ['deco', '😀', '글씨·스티커'], ['fx', '✨', '효과']]],
+  song: ['②', '🎤', '노래 맞추기', [['mus', '🎵', '음악'], ['lyr', '🎤', '가사'], ['sync', '⏱', '장면 맞추기'], ['vo', '🎙', '내 목소리']]],
+  fin: ['③', '💾', '마무리', [['info', '🏷', '카드·정보'], ['ai', '🤖', 'AI'], ['save', '💾', '저장']]]
+};
+const TAB_OLD = { edit: 'scene', cap: 'deco', stk: 'deco', snd: 'mus' };
+let MODE = 'vid'; const MLAST = { vid: 'scene', song: 'mus', fin: 'info' };
+function modeOf(t) { for (const [m, v] of Object.entries(MODES)) if (v[3].some(x => x[0] === t)) return m; return ''; }
+function setTab(t) {
+  t = TAB_OLD[t] || t; const m = modeOf(t); if (!m) return;
+  if (TAB === 'lyr' && t !== 'lyr') lyrRemind();
+  if (m !== 'song' && TAPC) tapStop();
+  MODE = m; TAB = t; MLAST[m] = t; try { localStorage.setItem('bkEdTab', t); } catch (e) { /* 무시 */ }
+  renderTabs(); renderPanel();
+}
+try { const t0 = localStorage.getItem('bkEdTab'); const t1 = TAB_OLD[t0] || t0; if (t1 && modeOf(t1)) { TAB = t1; MODE = modeOf(t1); MLAST[MODE] = t1; } } catch (e) { /* 무시 */ }
+function renderTabs() {
+  $('modes').innerHTML = Object.entries(MODES).map(([k, v]) => `<button type="button" data-m="${k}"${pressed(MODE, k)}><b>${v[0]}</b>${v[1]} ${v[2]}</button>`).join('');
+  $('tabs').innerHTML = MODES[MODE][3].map(([k, i, n]) => `<button type="button" data-tab="${k}"${pressed(TAB, k)}><span>${i}</span>${n}</button>`).join('');
+  $('cutbar').hidden = MODE !== 'song'; document.body.dataset.mode = MODE;
+}
+$('modes').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b) return; setTab(MLAST[b.dataset.m]); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+$('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (!b) return; setTab(b.dataset.tab); window.scrollTo({ top: 0, behavior: 'smooth' }); });
 const cur = () => (SEL >= 0 && SEL < P.clips.length ? P.clips[SEL] : null);
 function head(c) {
   if (!c) return `<p class="empty">아래 줄(타임라인)에서 <b>장면을 눌러</b> 골라 주세요.</p>`;
@@ -556,14 +629,14 @@ const range = (key, val, min, max, step, lbl) => `<label class="rg"><span>${lbl}
 
 function renderPanel() {
   if (!P) return;
-  const c = cur(), f = { edit: pEdit, order: pOrder, cap: pCap, stk: pStk, fx: pFx, snd: pSnd, ai: pAI, info: pInfo, save: pSave }[TAB];
+  const c = cur(), f = { scene: pEdit, order: pOrder, deco: pDeco, fx: pFx, mus: pMus, lyr: pLyr, sync: pSync, vo: pVo, ai: pAI, info: pInfo, save: pSave }[TAB] || pEdit;
   $('panel').innerHTML = f(c); fillThumbs($('panel'));
   const ta = $('panel').querySelector('textarea[data-auto]'); if (ta) autoGrow(ta);
 }
 function autoGrow(t) { t.style.height = 'auto'; t.style.height = Math.min(320, t.scrollHeight + 4) + 'px'; }
 
 /* ── ✂️ 편집 ── */
-const lenBox = c => `<div class="nudge"><button type="button" data-a="lenn" data-v="-1">−1초</button><button type="button" data-a="lenn" data-v="-0.1">−0.1</button><button type="button" data-a="lenn" data-v="0.1">+0.1</button><button type="button" data-a="lenn" data-v="1">+1초</button></div><p class="hint" style="margin:4px 0 0">지금 <b>${clipLen(c).toFixed(1)}초</b> · 뒤 장면은 <b>${cutMode() === 'ripple' ? 'B 같이 당기기 · 밀기' : 'A 그대로 (다음 장면만 늘고 줄어요)'}</b> — 미리보기 아래 「뒤 장면」 버튼으로 바꿔요</p>`;
+const lenBox = c => `<div class="nudge"><button type="button" data-a="lenn" data-v="-1">−1초</button><button type="button" data-a="lenn" data-v="-0.1">−0.1</button><button type="button" data-a="lenn" data-v="0.1">+0.1</button><button type="button" data-a="lenn" data-v="1">+1초</button></div><p class="hint" style="margin:4px 0 0">지금 <b>${clipLen(c).toFixed(1)}초</b> · 뒤 장면은 <b>${cutMode() === 'ripple' ? 'B 같이 당기기 · 밀기' : 'A 그대로 (다음 장면만 늘고 줄어요)'}</b></p>${chips('cutmode', [['roll', 'A 뒤 장면 그대로'], ['ripple', 'B 뒤 장면 같이 당기기 · 밀기']], cutMode())}`;
 const cutHelp = () => `<details class="grp cuthelp"><summary>⏱ 미리보기 아래 「✂️ 여기서 끝 · ➡️ 앞 장면 여기까지 · 🎵 톡톡」 쓰는 법</summary><ol>
   <li>▶로 노래를 듣다가 장면을 바꾸고 싶은 곳에서 ⏸ → <b>◀ 0.1초 ▶</b>로 빨간 커서를 딱 맞춰요.</li>
   <li><b>✂️ 여기서 끝</b> — 빨간 커서가 있는 장면을 여기까지로 → 다음 장면이 바로 여기서 시작해요.</li>
@@ -571,13 +644,13 @@ const cutHelp = () => `<details class="grp cuthelp"><summary>⏱ 미리보기 �
   <li><b>🎵 톡톡 넘기기</b> — 노래를 들으며 「다음 장면!」 순간마다 큰 버튼을 톡. 처음부터 끝까지 한 번에 맞춰요. (↩ 다시 = 방금 것 취소)</li>
   <li><b>뒤 장면</b> 버튼으로 바꿔요 — <b>A 그대로</b>: 옆 장면만 늘거나 줄고 그 뒤는 제자리 (뒤쪽을 이미 맞춰 뒀을 때) · <b>B 같이</b>: 뒤 장면 전부가 함께 당겨지거나 밀려요 (⬜ 빈칸 길이를 맞출 때 편해요)</li></ol></details>`;
 function pEdit(c) {
-  let h = trayBox() + head(c) + cutHelp();
+  let h = trayBox() + head(c);
   if (c && c.blank) h += blankFill(c);
   if (c) {
     h += c.kind === 'card' ? `<div class="btns4"><button type="button" data-a="mv" data-v="-1">◀ 앞으로</button><button type="button" data-a="mv" data-v="1">뒤로 ▶</button><button type="button" data-a="dup">📄 복제</button><button type="button" data-a="del" class="dg">🗑 지우기</button></div>`
       : `<div class="btns4"><button type="button" data-a="mvfirst">⏮ 맨 앞</button><button type="button" data-a="mv" data-v="-1">◀ 앞으로</button><button type="button" data-a="mv" data-v="1">뒤로 ▶</button><button type="button" data-a="mvlast">맨 뒤 ⏭</button></div>
       <div class="btns4" style="grid-template-columns:2fr 1fr 1fr;margin-top:0"><button type="button" data-a="mvto">🔢 몇 번째로</button><button type="button" data-a="dup">📄 복제</button><button type="button" data-a="del" class="dg">🗑 지우기</button></div>
-      <div class="btns2" style="margin-bottom:6px">${c.pin ? `<button type="button" data-a="pin" data-v="" style="grid-column:1/-1">${c.pin === 'first' ? '📌 첫 화면' : '🏁 엔딩 화면'}으로 고정됨 · 눌러서 고정 풀기</button>` : `<button type="button" data-a="pin" data-v="first">📌 첫 화면으로 고정</button><button type="button" data-a="pin" data-v="last">🏁 엔딩 화면으로 고정</button>`}</div>`;
+      <div class="btns2" style="margin-bottom:6px"><button type="button" data-a="swap" style="grid-column:1/-1">🔄 다른 사진으로 바꾸기 <small style="font-weight:600">(시간 · 글씨 · 효과는 그대로)</small></button></div><div class="btns2" style="margin-bottom:6px">${c.pin ? `<button type="button" data-a="pin" data-v="" style="grid-column:1/-1">${c.pin === 'first' ? '📌 첫 화면' : '🏁 엔딩 화면'}으로 고정됨 · 눌러서 고정 풀기</button>` : `<button type="button" data-a="pin" data-v="first">📌 첫 화면으로 고정</button><button type="button" data-a="pin" data-v="last">🏁 엔딩 화면으로 고정</button>`}</div>`;
     if (c.kind === 'video') {
       const s = SRC.get(c.src), d = s ? s.dur : c.out;
       h += `<div class="grp"><h3>✂️ 자르기 <small>필요한 부분만 남겨요</small></h3>
@@ -604,12 +677,12 @@ function pEdit(c) {
 function pCap(c) {
   const cd = P.capDef, I = c ? ED.capInfo(c) : null;
   let h = head(c);
-  if (c) h += `<div class="grp"><h3>💬 이 장면 자막</h3><textarea data-a="cap" data-auto rows="2" placeholder="예: 그 시절 우리 ㅋㅋ (줄을 바꾸면 두 줄)">${esc(c.cap.t || '')}</textarea>
+  if (c) h += `<div class="grp"><h3>💬 이 장면 글씨 <small>장면 위에 얹는 자막</small></h3><textarea data-a="cap" data-auto rows="2" placeholder="예: 그 시절 우리 ㅋㅋ (줄을 바꾸면 두 줄)">${esc(c.cap.t || '')}</textarea>
     <div class="chips"><span class="lbl">위치</span><button type="button" data-a="cy" data-v=".18">⬆ 위</button><button type="button" data-a="cy" data-v=".5">가운데</button><button type="button" data-a="cy" data-v=".82">⬇ 아래</button><button type="button" data-a="cy" data-v="">스타일대로</button></div>
     <p class="hint">미리보기에서 자막을 <b>손가락으로 끌어</b> 옮길 수도 있어요.</p>
     <details class="sub"><summary>이 장면만 다르게 (모양 · 색 · 크기)</summary>${chips('cst', Object.assign({ '': '전체와 같게' }, Object.fromEntries(Object.entries(CAPS).map(([k, v]) => [k, v.n]))), c.cap.style || '')}
      <div class="colors">${['', ...COLORS].map(v => `<button type="button" data-a="ccol" data-v="${v}" style="${v ? 'background:' + v : ''}"${pressed(c.cap.color || '', v)}>${v ? '' : '기본'}</button>`).join('')}</div>${range('csize', c.cap.size || 1, .5, 2, .05, '크기')}</details></div>`;
-  h += `<div class="grp"><h3>🎨 전체 자막 모양</h3>${chips('style', Object.fromEntries(Object.entries(CAPS).map(([k, v]) => [k, v.n])), cd.style)}
+  h += `<div class="grp"><h3>🎨 장면 글씨 모양 (전체)</h3>${chips('style', Object.fromEntries(Object.entries(CAPS).map(([k, v]) => [k, v.n])), cd.style)}
     <h4>글씨체</h4><div class="chips">${['', ...FONTS].map(id => `<button type="button" data-a="font" data-v="${id}"${pressed(cd.font || '', id)}>${id ? esc(ENG.fontDef(id).label) : '모양에 맞게'}</button>`).join('')}</div>
     <h4>색</h4><div class="colors">${['', ...COLORS].map(v => `<button type="button" data-a="col" data-v="${v}" style="${v ? 'background:' + v : ''}"${pressed(cd.color || '', v)}>${v ? '' : '기본'}</button>`).join('')}</div>
     ${range('size', cd.size || 1, .6, 1.8, .05, '크기')}
@@ -793,16 +866,6 @@ async function blankFiles(fs) {
 /* ═════════ 🧩 사진 순서 정하기: 🎤 가사 보며 고르기 · 🤖 AI 짝짓기 · 🔢 순서대로 톡톡 ═════════ */
 let ORDM = '', LYROPEN = -1, TAPORD = [], ORDREST = 'after', LMANS = '';
 const saveT2 = () => { commit(true); };
-function pOrder() {
-  const hasL = !!(P.lyrics && P.lyrics.lines && P.lyrics.lines.length && musFile());
-  if (!ORDM) ORDM = hasL ? 'lyr' : 'tap';
-  let h = `<div class="grp"><h3>🧩 사진 순서 정하기</h3>${chips('ordm', { lyr: '🎤 가사 보며 고르기', ai: '🤖 AI가 짝짓기', tap: '🔢 순서대로 톡톡' }, ORDM)}
-    <p class="hint" style="margin-bottom:0">${ORDM === 'lyr' ? '가사 줄마다 어울리는 사진을 골라요 → 그 가사를 부르는 동안 그 사진이 나와요.' : ORDM === 'ai' ? 'AI가 사진을 보고 가사 줄마다 어울리는 사진을 골라 줘요 → 🎤 화면에서 확인 · 고치기.' : '사진을 보여 줄 순서대로 톡톡 누르면 번호가 붙어요 → ✅ 정리.'} 한두 장만 옮길 때는 아래 사진 줄에서 <b>사진을 꾹 눌러 끌어도</b> 돼요.</p></div>`;
-  h += blankBox();
-  if (ORDM === 'tap') return h + tapUI();
-  if (!hasL) return h + `<div class="grp"><p style="margin-top:0">먼저 <b>🎵 소리</b> 탭에서 ① 내 음악(MP3)을 넣고 ② <b>🎤 노래 가사 자막</b>을 넣어 주세요. 가사 줄마다 사진을 고를 수 있어요.</p><button type="button" data-a="gotab" data-v="snd" class="sec">🎵 소리 탭 열기</button></div>`;
-  return h + (ORDM === 'lyr' ? lyrUI() : aiUI());
-}
 function mediaSrcs() { const order = []; P.clips.forEach(c => { if (c.src && !order.includes(c.src) && !c.pin) order.push(c.src); }); P.srcs.forEach(s => { if (s.kind !== 'audio' && !order.includes(s.id) && !P.clips.some(c => c.pin && c.src === s.id)) order.push(s.id); }); return order.filter(id => P.srcs.some(s => s.id === id)); }
 function storyRows() { const n = P.lyrics.lines.length; if (!P.story || !Array.isArray(P.story.rows) || P.story.rows.length !== n) P.story = { rows: Array.from({ length: n }, () => []) }; return P.story.rows; }
 function lyrUI() {
@@ -962,7 +1025,8 @@ function lyrBox() {
     return h;
   }
   h += `<textarea data-a="lyr" rows="5" placeholder="가사를 붙여넣으세요 (한 줄에 한 마디)\n시간이 있으면 그대로 써요: [00:15] 첫 줄 가사\n[Verse] · [후렴] 같은 표시는 자동으로 빠져요">${esc(Ly.raw || '')}</textarea>
-    <div class="btns2"><button type="button" data-a="lyrset" class="pri">✅ 가사 넣기</button><button type="button" data-a="lyrai">🤖 Gemini로 가사 · 시간 받기</button></div>
+    <p id="lyrWarn" class="lyrwarn"${lyrNeed() ? '' : ' hidden'}>⚠️ 붙여넣은 가사는 바로 아래 <b>✅ 가사 넣기 (저장)</b>을 눌러야 자막으로 나와요</p>
+    <div class="btns2"><button type="button" data-a="lyrset" class="pri">✅ 가사 넣기 (저장)</button><button type="button" data-a="lyrai">🤖 Gemini로 가사 · 시간 받기</button></div>
     <p class="hint">🤖 <b>수노 가사를 먼저 위 칸에 붙여넣고</b> 버튼을 누르면 요청 글(가사 포함)이 복사되고 Gemini가 열려요.<br>Gemini에서 <b>① 아래 ＋ → 파일 → 이 MP3를 꼭 먼저 올리고</b> ② 입력칸을 길게 눌러 붙여넣기 ③ 보내기 → 시간이 붙은 가사를 통째로 복사해서 위 칸에 붙여넣고 ✅.<br>⚠️ MP3를 안 올리면 「파일이 보이지 않습니다」라고 해요. 그래도 안 해 주면 <b>👆 톡톡 맞추기</b>가 가장 확실해요.</p>`;
   if (n) {
     h += `<p>✅ 가사 <b>${n}줄</b> · ${Ly.timed ? '시간 맞춤' : '고르게 나눔'}</p>
@@ -980,7 +1044,7 @@ function lyrBox() {
 function lyrCmd(a, v) {
   const mf = musFile(); if (!mf) return toast('먼저 📁 내 음악 파일을 넣어 주세요');
   P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; const Ly = P.lyrics;
-  if (a === 'lyrset') { const r = lyrParse(Ly.raw); if (!r.lines.length) return toast('가사를 먼저 붙여넣어 주세요'); Ly.lines = r.lines; Ly.timed = r.timed; if (!r.timed) lyrSpread(Ly.lines, mf.dur); Ly.lines.sort((p, q) => p.t - q.t); Ly.on = 1; commit(); renderPanel(); return toast(r.timed ? `🎤 가사 ${Ly.lines.length}줄을 시간에 맞춰 넣었어요 · ▶로 확인해 보세요` : `🎤 가사 ${Ly.lines.length}줄을 고르게 나눴어요 · 「👆 톡톡 맞추기」로 정확히 맞출 수 있어요`, 4500); }
+  if (a === 'lyrset') { const r = lyrParse(Ly.raw); if (!r.lines.length) return toast('가사를 먼저 붙여넣어 주세요'); Ly.lines = r.lines; Ly.timed = r.timed; Ly.rawSet = Ly.raw; if (!r.timed) lyrSpread(Ly.lines, mf.dur); Ly.lines.sort((p, q) => p.t - q.t); Ly.on = 1; commit(); renderPanel(); return toast(r.timed ? `🎤 가사 ${Ly.lines.length}줄을 시간에 맞춰 넣었어요 · ▶로 확인해 보세요` : `🎤 가사 ${Ly.lines.length}줄을 고르게 나눴어요 · 「👆 톡톡 맞추기」로 정확히 맞출 수 있어요`, 4500); }
   if (a === 'lyrai') { const t = '(이 메시지와 함께 제가 만든 노래 MP3 파일을 첨부했어요)\n첨부한 노래(MP3)의 가사를 들리는 대로 받아 적어 주세요.\n- 한 줄씩 나눠서, 줄마다 맨 앞에 그 줄을 부르기 시작하는 시간을 [분:초] 형식으로 붙여 주세요. 예: [00:15] 첫 줄 가사\n- 반주만 나오는 부분(간주)은 쓰지 마세요.\n- 한 줄은 화면 자막에 맞게 15자 안팎으로 짧게 나눠 주세요.\n- 다른 설명 없이 시간과 가사만 써 주세요.' + (Ly.raw && Ly.raw.trim() ? '\n\n아래는 원래 가사예요. 이 글자 그대로 쓰고 시간만 맞춰 주세요:\n' + Ly.raw.trim() : ''); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('📋 복사했어요 · Gemini에서 ① ＋로 MP3 먼저 올리기 ② 붙여넣기 ③ 보내기', 6000)).catch(() => {}); setTimeout(() => g.open('https://gemini.google.com/app', '_blank'), 300); return; }
   if (a === 'lyron') { Ly.on = +v; commit(); renderPanel(); return; }
   if (a === 'lyreven') { lyrSpread(Ly.lines, mf.dur); Ly.timed = 0; commit(); renderPanel(); return toast('↔ 고르게 나눴어요'); }
@@ -993,22 +1057,48 @@ function lyrCmd(a, v) {
   if (a === 'lyrtapstop') { if (LYT > 0) { const done = LYT, last = Ly.lines[done - 1].t, e = mf.dur - Math.min(8, mf.dur * .05), rest = Ly.lines.length - done, st = (e - last) / Math.max(1, rest + 1); for (let i = done; i < Ly.lines.length; i++) Ly.lines[i].t = Math.round((last + (i - done + 1) * st) * 10) / 10; } LYT = -1; if (PLAY) pause(); commit(); renderPanel(); return toast('■ 그만했어요 · 남은 줄은 고르게 나눴어요'); }
 }
 /* ── 🎵 소리 ── */
-function pSnd(c) {
+/* ── ② 🎤 노래 맞추기 탭들 ── */
+function pMus(c) {
   const M = P.music, pp = PURPOSE[P.purpose], L = (g.BKMUSIC && g.BKMUSIC.LIST) || [];
-  let h = `<div class="grp"><h3>🎵 배경 음악</h3><div class="chips"><button type="button" data-a="mus" data-v="auto"${pressed(M.kind, 'auto')}>✨ 추천 (${esc(g.BKMUSIC ? g.BKMUSIC.label(pp.mus) : pp.mus)})</button><button type="button" data-a="mus" data-v="none"${pressed(M.kind, 'none')}>🔇 음악 없음</button></div>
+  return `<div class="grp"><h3>🎵 배경 음악</h3><h4>내 음악 (수노 MP3 등)</h4><label class="btnf ${M.kind === 'file' ? 'on' : ''}">📁 내 음악 파일 고르기 ${M.kind === 'file' ? '(넣음)' : ''}<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label>${musFitBox()}
+    ${M.kind === 'file' ? `<button type="button" data-a="gotab" data-v="lyr" class="sec">🎤 노래방 가사 자막 넣으러 가기</button>` : ''}
+    <h4>프로그램 음악</h4><div class="chips"><button type="button" data-a="mus" data-v="auto"${pressed(M.kind, 'auto')}>✨ 추천 (${esc(g.BKMUSIC ? g.BKMUSIC.label(pp.mus) : pp.mus)})</button><button type="button" data-a="mus" data-v="none"${pressed(M.kind, 'none')}>🔇 음악 없음</button></div>
     ${L.map(([gn, items]) => `<h4>${esc(gn)}</h4><div class="chips">${items.map(([k, n]) => `<button type="button" data-a="mus" data-v="${k}"${pressed(M.kind, k)}>${esc(n)}</button>`).join('')}</div>`).join('')}
-    <h4>내 음악</h4><label class="btnf ${M.kind === 'file' ? 'on' : ''}">📁 내 음악 파일 고르기 ${M.kind === 'file' ? '(넣음)' : ''}<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label>${musFitBox()}${lyrBox()}
     <p class="hint">홍보 영상에는 <b>저작권 걱정 없는 음악</b>만 쓰세요. 기본 음악은 프로그램이 직접 연주해서 괜찮아요.</p>
     ${range('mvol', M.vol, 0, 1.2, .05, '음악 크기 %')}${chips('duck', [['1', '🗣 말소리 나올 때 음악 작게'], ['0', '항상 같은 크기']], M.duck ? 1 : 0)}
     <h4>끝날 때 음악 줄이기</h4>${chips('mfade', [['0', '바로 끝'], ['2.5', '2.5초'], ['5', '5초']], M.fade)}</div>
-   <div class="grp"><h3>🎞 동영상 원래 소리 (전체)</h3>${range('cvol', P.clipVol, 0, 1.5, .05, '크기 %')}</div>`;
-  h += `<div class="grp"><h3>🎤 내 목소리 넣기 ${c ? `<small>장면 ${SEL + 1}에</small>` : ''}</h3>`;
-  if (!c) h += '<p class="empty">장면을 먼저 골라 주세요.</p>';
-  else if (c.vo && SRC.get(c.vo.src)) h += `<p>🎤 목소리 ${SRC.get(c.vo.src).dur.toFixed(1)}초</p>${range('vovol', c.vo.vol || 1.2, .3, 2, .05, '목소리 크기 %')}<div class="btns2"><button type="button" data-a="voplay">▶ 들어 보기</button><button type="button" data-a="vodel" class="dg">🗑 지우기</button></div>`;
-  else h += `<button type="button" data-a="rec" class="pri" id="recBtn">${REC ? '■ 녹음 멈추기' : '● 녹음 시작'}</button><p class="hint">장면을 설명하는 말, 부모님께 드리는 편지 등을 직접 녹음해 넣어요. 녹음이 나오는 동안 음악은 작아져요.</p>`;
-  h += `</div><button type="button" data-a="play" class="pri">▶ 소리까지 미리 듣기</button>`;
+   <div class="grp"><h3>🎞 동영상 원래 소리 (전체)</h3>${range('cvol', P.clipVol, 0, 1.5, .05, '크기 %')}</div><button type="button" data-a="play" class="pri">▶ 소리까지 미리 듣기</button>`;
+}
+function pLyr() {
+  if (!musFile()) return `<div class="grp"><h3>🎤 노래방 가사 자막</h3><p style="margin-top:0">먼저 <b>내 음악(MP3)</b>을 넣어 주세요. 가사를 그 노래에 맞춰 노래방처럼 보여 줘요.</p><label class="btnf">📁 내 음악 파일 고르기<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label><p class="hint">수노에서 받은 MP3를 고르면 돼요. 프로그램 음악은 🎵 음악 탭에 있어요.</p></div>`;
+  let h = lyrBox(); const Ly = P.lyrics;
+  if (Ly && Ly.lines && Ly.lines.length) { if (ORDM !== 'ai') ORDM = 'lyr'; h += `<div class="grp"><h3>🖼 가사 줄마다 사진 고르기 <small>그 가사를 부르는 동안 그 사진이 나와요</small></h3>${chips('ordm', { lyr: '🎤 내가 고르기', ai: '🤖 AI가 짝짓기' }, ORDM)}</div>` + (ORDM === 'ai' ? aiUI() : lyrUI()); }
   return h;
 }
+function pSync() {
+  return cutHelp().replace('<details class="grp cuthelp">', '<details class="grp cuthelp" open>') + blankBox()
+    + `<div class="grp"><h3>🥁 박자에 맞춰 넘기기</h3><button type="button" data-a="tbeat" class="sec">🥁 사진이 노래 박자에 맞춰 넘어가게</button><p class="hint">노래의 박자를 찾아 사진 길이를 박자에 맞춰요. 그다음 ✂️ · 🎵 톡톡으로 다듬으면 돼요.</p></div>`;
+}
+function pVo(c) {
+  let h = head(c) + `<div class="grp"><h3>🎙 내 목소리 넣기 ${c ? `<small>장면 ${SEL + 1}에</small>` : ''}</h3>`;
+  if (!c) h += '<p class="empty">아래 사진 줄에서 장면을 먼저 골라 주세요.</p>';
+  else if (c.vo && SRC.get(c.vo.src)) h += `<p>🎤 목소리 ${SRC.get(c.vo.src).dur.toFixed(1)}초</p>${range('vovol', c.vo.vol || 1.2, .3, 2, .05, '목소리 크기 %')}<div class="btns2"><button type="button" data-a="voplay">▶ 들어 보기</button><button type="button" data-a="vodel" class="dg">🗑 지우기</button></div>`;
+  else h += `<button type="button" data-a="rec" class="pri" id="recBtn">${REC ? '■ 녹음 멈추기' : '● 녹음 시작'}</button><p class="hint">장면을 설명하는 말, 부모님께 드리는 편지 등을 직접 녹음해 넣어요. 녹음이 나오는 동안 음악은 작아져요.</p>`;
+  return h + `</div><button type="button" data-a="play" class="pri">▶ 소리까지 미리 듣기</button>`;
+}
+/* ── ① 😀 글씨·스티커 (장면 글씨 + 스티커 한곳에) ── */
+function pDeco(c) {
+  return `<p class="hint" style="margin:0 0 8px">🎤 노래 가사 자막은 <b>② 노래 맞추기 › 🎤 가사</b>에 있어요. 여기는 장면 위에 얹는 글씨 · 스티커예요.</p>` + pCap(c) + pStk(c).replace(head(c), '');
+}
+/* ── ① 🧩 순서 ── */
+function pOrder() {
+  return `<div class="grp"><h3>🧩 순서 바꾸는 방법</h3><ul class="tips"><li>아래 사진 줄에서 사진을 <b>꾹 누른 채 끌면</b> 옮겨져요</li><li><b>꾹 눌렀다 떼면</b> 📄 복사 · 📍 몇 번 사이에 · ↔ 옮기기 · 🔄 바꾸기 메뉴</li><li>✂️ 장면 탭: ⏮ 맨 앞 · 맨 뒤 ⏭ · 🔢 몇 번째로 · 📌 고정</li><li>가사에 맞춰 사진 고르기 → <b>② 노래 맞추기 › 🎤 가사</b></li></ul>
+    <div class="btns2"><button type="button" data-a="sortdate">🗓 찍은 날짜 순서로</button><button type="button" data-a="gotab" data-v="lyr">🎤 가사 보며 고르기로</button></div></div>` + tapUI();
+}
+/* 🎤 가사: 붙여넣으면 바로 저장 · ✅ 안 누르면 알려 주기 */
+function lyrNeed() { const Ly = P && P.lyrics; if (!Ly || !(Ly.raw || '').trim()) return false; if (!(Ly.lines || []).length) return true; return Ly.rawSet != null && Ly.raw !== Ly.rawSet; }
+function lyrWarnUpd() { const el = $('lyrWarn'); if (el) el.hidden = !lyrNeed(); }
+function lyrRemind() { if (lyrNeed()) toast('🎤 붙여넣은 가사는 「✅ 가사 넣기 (저장)」을 눌러야 자막으로 나와요', 5000); }
 /* ── 🤖 AI ── */
 function pAI() {
   const pp = PURPOSE[P.purpose];
@@ -1160,7 +1250,7 @@ $('panel').addEventListener('input', e => {
   if (a === 'it') { P.info[el.dataset.v] = v; drawNow(); return; }
   if (a === 'lyrsz') { if (P.lyrics) { P.lyrics.size = +v; drawNow(); } return; }
   if (el.id === 'lmAns') { LMANS = v; return; }
-  if (a === 'lyr') { P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; P.lyrics.raw = v; return; }
+  if (a === 'lyr') { P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; P.lyrics.raw = v; clearTimeout(saveT); saveT = setTimeout(saveProj, 600); lyrWarnUpd(); return; }
   if (a === 'bf') { const L = ED.brands(), b = L.find(x => x.id === P.info.brandId); if (b) { b[el.dataset.v] = v; ED.saveBrands(L); drawNow(); } return; }
 });
 $('panel').addEventListener('change', async e => {
@@ -1188,6 +1278,9 @@ $('panel').addEventListener('click', async e => {
     case 'blanknext': { const B = blanks(); if (!B.length) return toast('빈칸이 없어요'); const j = B.find(i => i > SEL); return select(j != null ? j : B[0], true); }
     case 'blankdelall': { const B = blanks(); if (!B.length || !confirm2(`빈 장면 ${B.length}개를 전부 지울까요?\n(뒤 사진들이 다시 앞으로 당겨져요 · ↩️ 되돌리기 가능)`)) return; P.clips = P.clips.filter(x => !x.blank); SEL = Math.min(SEL, P.clips.length - 1); T = Math.min(T, timeline(P).total); toast('🗑 빈칸을 전부 지웠어요'); return re(); }
     case 'lenn': return lenNudge(+v);
+    case 'cutmode': P.cutMode = v; commit(); renderCut(); return renderPanel();
+    case 'swap': if (c && c.kind !== 'card') swapSheet(c.id); return;
+    case 'trayunhide': P.trayHide = []; commit(); renderPanel(); return toast('🗂 뺐던 사진을 서랍에 다시 꺼냈어요');
     case 'trayput': { if (PLAY) pause(); const nc = newFromSrc(v); if (!nc) return toast('사진을 열 수 없어요'); return putAt(nc, nearPos(), '🗂'); }
     case 'bmerge': return blankMerge();
     case 'bmergeall': return blankMergeAll();
@@ -1229,7 +1322,7 @@ $('panel').addEventListener('click', async e => {
     case 'treset': P.clips.forEach(x => { x.trans = 'auto'; }); toast('🔄 모든 장면을 전체 방식으로 맞췄어요'); return re();
     case 'tbeat': return beatSync();
     case 'ordm': ORDM = v; LYROPEN = -1; return renderPanel();
-    case 'gotab': TAB = v; renderTabs(); return renderPanel();
+    case 'gotab': return setTab(v);
     case 'otap': { const k = TAPORD.indexOf(v); if (k >= 0) TAPORD.splice(k, 1); else TAPORD.push(v); return renderPanel(); }
     case 'otapclr': TAPORD = []; return renderPanel();
     case 'orest': ORDREST = v; return renderPanel();
@@ -1252,7 +1345,7 @@ $('panel').addEventListener('click', async e => {
     case 'lmapply': return lmApply(($('lmAns') || {}).value || LMANS);
     case 'lyrset': case 'lyrai': case 'lyron': case 'lyreven': case 'lyrshift': case 'lyrst': case 'lyrpos': case 'lyrtapgo': case 'lyrtap': case 'lyrtapback': case 'lyrtapstop': return lyrCmd(a, v);
     case 'alldur': P.clips.forEach(x => { if (x.kind === 'image') x.dur = c.dur; }); toast('모든 사진 길이를 맞췄어요'); return re();
-    case 'goinfo': TAB = 'info'; renderTabs(); return renderPanel();
+    case 'goinfo': return setTab('info');
     case 'fit': if (c) { c.fit = v; return re(); } return;
     case 'focus': FOCUS = !FOCUS; drawNow(); return renderPanel();
     case 'trans': if (c) { c.trans = v; return re(); } return;
