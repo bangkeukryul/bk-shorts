@@ -77,6 +77,7 @@ async function resume(p) {
 
 /* ═════════ 자료 넣기 ═════════ */
 async function addFiles(fs, pos) {
+  try { if (g.BKLIB) g.BKLIB.addMany(fs); } catch (e) { /* 보관함 담기 실패는 무시 */ }   // 📥 내 사진 보관함에도 담기
   const pp = PURPOSE[P.purpose], add = [];
   if (pos == null) { pos = P.clips.length; if (P.clips.length && P.clips[P.clips.length - 1].kind === 'card' && P.clips[P.clips.length - 1].card !== 'title') pos--; }
   let n = 0;
@@ -85,7 +86,7 @@ async function addFiles(fs, pos) {
     const kind = /^image\//.test(f.type) ? 'image' : /^video\//.test(f.type) ? 'video' : /^audio\//.test(f.type) ? 'audio' : (/\.(mp4|mov|m4v|webm)$/i.test(f.name) ? 'video' : /\.(jpe?g|png|webp|gif|heic)$/i.test(f.name) ? 'image' : null);
     if (!kind || kind === 'audio') continue;
     const id = uid('s'), code = kind === 'image' ? 'P' + (P.nP++) : 'V' + (P.nV++);
-    const meta = { id, code, kind, name: f.name, lm: f.lastModified || 0 };
+    const meta = { id, code, kind, name: f.name, lm: f.lastModified || 0, libKey: g.BKLIB ? g.BKLIB.keyOf(f) : '' };
     try {
       const s = await ED.loadSource(meta, f);
       Object.assign(meta, { dur: s.dur, w: s.w, h: s.h });
@@ -277,6 +278,26 @@ async function sheetChange(e) {
   const n0 = P.clips.length, n = await addFiles(fs.slice(0, 1), n0); if (!n) return; const nc = P.clips.splice(n0)[0];
   swapDone(c, nc.src);
 }
+/* 📥 내 사진 보관함에서 고르기 (첫 화면 → 새 영상 · 🗂 서랍 → 가져오기) */
+let LIBSEL = new Set();
+async function libSheet(mode) {
+  if (!g.BKLIB) return toast('보관함을 열 수 없어요');
+  const L = await g.BKLIB.list(); if (!L.length) return toast('📥 보관함이 비어 있어요 · BK쇼츠 첫 화면의 사진 탭이나 ✂️ 편집 탭에서 사진을 고르면 담겨요', 5000);
+  const have = new Set(((P && P.srcs) || []).map(s => s.libKey).filter(Boolean)); SHX = { lib: mode }; LIBSEL = new Set();
+  sheet(`<div class="shh"><div><b>📥 내 사진 보관함</b><small>${L.length}개 · 톡톡 골라서 ${mode === 'start' ? '영상 시작' : '서랍으로 가져오기'}</small></div></div>
+    <div class="ggrid libg">${L.map(m => `<button type="button" class="gbtn" data-s="libt" data-v="${m.id}">${m.th ? `<img src="${m.th}" alt="">` : `<b class="lno">${m.kind === 'video' ? '🎞' : '🖼'}</b>`}${have.has(m.key) ? '<i>서랍에 있음</i>' : ''}${m.kind === 'video' ? '<small>🎞</small>' : ''}</button>`).join('')}</div>
+    <button type="button" data-s="libok" class="pri" id="libOk" disabled>사진을 톡톡 골라 주세요</button>
+    <button type="button" data-s="liball">☑ 전부 고르기</button><button type="button" data-s="close" class="cl">닫기</button>`);
+}
+function libUpd() { const b = $('libOk'); if (!b) return; const n = LIBSEL.size; b.disabled = !n; b.textContent = n ? `✅ ${n}개${SHX && SHX.lib === 'start' ? '로 영상 시작' : ' 서랍으로 가져오기'}` : '사진을 톡톡 골라 주세요'; }
+async function libTake() {
+  const mode = SHX && SHX.lib, ids = Array.from(LIBSEL); sheetClose(); if (!ids.length) return;
+  busy('📥 보관함에서 꺼내는 중…'); let fs = []; try { fs = (await Promise.all(ids.map(id => g.BKLIB.getFile(id)))).filter(Boolean); } catch (e) { fs = []; } busy('');
+  if (!fs.length) return toast('꺼내지 못했어요');
+  if (mode === 'start') { try { const dt = new DataTransfer(); fs.forEach(f => dt.items.add(f)); $('fStart').files = dt.files; $('fStart').dispatchEvent(new Event('change')); } catch (e) { toast('파일을 열 수 없어요'); } return; }
+  return trayFiles(fs);
+}
+$('libStart').addEventListener('click', () => libSheet('start'));
 function clipMenu(i) {
   const c = P.clips[i]; if (!c || c.kind === 'card') return; SEL = i; renderTL();
   SHX = { i, id: c.id };
@@ -304,6 +325,9 @@ function sheetClick(e) {
   const b = e.target.closest('[data-s]'); if (!b) return; const k = b.dataset.s, v = b.dataset.v, X = SHX;
   if (k === 'close') return sheetClose();
   if (k === 'n') { const n = $('shN'), [lo, hi] = movRange(); n.value = clamp((parseInt(n.value, 10) || 0) + +v, lo, hi + 1); return sheetInput({ target: n }); }
+  if (k === 'libt') { if (LIBSEL.has(v)) LIBSEL.delete(v); else LIBSEL.add(v); b.classList.toggle('on', LIBSEL.has(v)); return libUpd(); }
+  if (k === 'liball') { $('edSheet').querySelectorAll('[data-s="libt"]').forEach(x => { LIBSEL.add(x.dataset.v); x.classList.add('on'); }); return libUpd(); }
+  if (k === 'libok') return libTake();
   if (!X) return sheetClose();
   if (k === 'twhere') return whereSheet({ mode: 'src', src: X.src });
   if (k === 'thide') { P.trayHide = Array.from(new Set([...(P.trayHide || []), X.src])); sheetClose(); commit(); renderPanel(); return toast(`🙈 ${srcCode(X.src)}을 서랍에서 뺐어요 · 다시 넣으려면 사진 줄에서 꾹 → 「🗂 서랍에 넣기」`, 4500); }
@@ -344,6 +368,7 @@ function trayBox() {
     <div class="trs">${ids.map(id => { const m = P.srcs.find(s => s.id === id); return `<button type="button" class="gbtn" data-a="trayput" data-v="${id}" data-lp="tray"><span data-gth="${id}"></span>${use[id] ? `<i>${use[id]}번 씀</i>` : '<i class="nu">안 씀</i>'}<small>${esc(m.code)}${m.kind === 'video' ? ' 🎞' : ''}</small></button>`; }).join('') || '<p class="hint">아직 담은 사진이 없어요</p>'}</div>
     <p class="hint" style="margin:6px 0 0">지금 넣으면 → <b id="trayAt">${between(nearPos())}</b>${nh ? ` · <button type="button" data-a="trayunhide" class="lnk">🙈 뺀 사진 ${nh}장 다시 꺼내기</button>` : ''}</p>
     <div class="btns2"><label class="btnf">📷 갤러리에서 서랍에 담기<input type="file" data-a="trayf" accept="image/*,video/*" multiple hidden></label><label class="btnf">📁 폴더에서 서랍에 담기<input type="file" data-a="trayf" multiple hidden></label></div>
+    <button type="button" data-a="libtray" class="sec" style="width:100%;margin-top:8px;background:#fef3c7;color:#92400e">📥 내 사진 보관함에서 가져오기</button>
     <p class="hint" style="margin:4px 0 0">서랍에 담기만 하고 영상에는 아직 안 들어가요. 미리 많이 담아 두고 골라 넣으세요.</p></div>`;
 }
 async function trayFiles(fs) {
@@ -1295,6 +1320,7 @@ $('panel').addEventListener('click', async e => {
     case 'cutmode': P.cutMode = v; commit(); renderCut(); return renderPanel();
     case 'swap': if (c && c.kind !== 'card') swapSheet(c.id); return;
     case 'trayunhide': P.trayHide = []; commit(); renderPanel(); return toast('🗂 뺐던 사진을 서랍에 다시 꺼냈어요');
+    case 'libtray': return libSheet('tray');
     case 'trayput': { if (PLAY) pause(); const nc = newFromSrc(v); if (!nc) return toast('사진을 열 수 없어요'); return putAt(nc, nearPos(), '🗂'); }
     case 'bmerge': return blankMerge();
     case 'bmergeall': return blankMergeAll();

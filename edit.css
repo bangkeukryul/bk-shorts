@@ -155,3 +155,6 @@ ul.tips{margin:4px 0 8px;padding-left:18px;font-size:.88rem;line-height:1.6}ul.t
 button.lnk{border:0;background:none;color:var(--ac2);font-weight:800;text-decoration:underline;padding:0;cursor:pointer;font-size:inherit}
 .trs .gbtn.flash{box-shadow:0 0 0 4px #f59e0b;animation:trfl .5s ease 0s 3 alternate}@keyframes trfl{from{transform:scale(1)}to{transform:scale(1.08)}}
 .edsheet .btnf{display:block;text-align:center}
+.gbtn img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.gbtn .lno{position:absolute;inset:0;display:grid;place-items:center;font-size:1.6rem}
+.libg .gbtn.on{border-color:#f59e0b;box-shadow:0 0 0 3px #f59e0b}.libg .gbtn.on::after{content:"✓";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:12px;background:#f59e0b;color:#fff;font:900 .9rem/24px sans-serif;text-align:center}
+.libg .gbtn small{right:3px;left:auto}

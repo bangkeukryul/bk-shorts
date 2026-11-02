@@ -198,6 +198,7 @@
   }
   async function addPhotos(files) {
     const all = Array.from(files || []);
+    try { if (window.BKLIB && isAdm()) window.BKLIB.addMany(all); } catch (e) { /* 📥 보관함 담기 실패는 무시 */ }
     const vids = all.filter(f => /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm|3gp)$/i.test(f.name));
     const list = all.filter(f => !vids.includes(f));
     if (vids.length) await addVideos(vids);
@@ -243,6 +244,7 @@
   }
   async function addVideos(files) {
     const list = Array.from(files || []);
+    try { if (window.BKLIB && isAdm()) window.BKLIB.addMany(list); } catch (e) { /* 📥 보관함 담기 실패는 무시 */ }
     if (!list.length) return;
     let bad = 0, mute = 0;
     for (let i = 0; i < list.length; i++) {
