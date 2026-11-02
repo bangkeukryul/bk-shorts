@@ -301,7 +301,7 @@ async function libTake() {
 $('libStart').addEventListener('click', () => libSheet('start'));
 /* ═════════ 🔒 사진 · 음악 맞춤 잠금 — 자막을 맞추다 장면 길이 · 순서가 틀어지지 않게 ═════════
    잠그면 글씨 · 효과 · 사진 바꾸기는 되지만, 장면 길이 · 순서가 바뀌는 일은 모두 되돌려요. */
-const sigOf = () => P.clips.map(c => c.id + '@' + clipLen(c).toFixed(2)).join('|');
+const sigOf = () => P.clips.map((c, i) => c.id + (i === P.clips.length - 1 && isEndC(c) ? '' : '@' + clipLen(c).toFixed(2))).join('|');   // 맨 끝 엔딩 길이는 잠가도 바꿀 수 있게
 const isLocked = () => !!(P && P.lock && P.lock.on);
 function lockMsg() { toast('🔒 사진 · 음악 맞춤이 잠겨 있어서 장면 길이 · 순서는 바꾸지 않았어요 · 위 「🔒 잠김」을 눌러 풀 수 있어요', 4500); }
 function mergeTiming(snap) {
@@ -387,6 +387,28 @@ function transPrev() {
   if (PLAY) pause(); T = Math.max(0, st[i] - .8); const end = st[i] + Math.min(+(P.transDur || .6), 2) + 1;
   play(); setTimeout(function chk() { if (!PLAY) return; if (T >= end) return pause(); setTimeout(chk, 60); }, 60);
 }
+/* 🅑 BK 아이콘: (가) BK쇼츠 앱 아이콘 · (나) 내 로고 (한 번 올려 두면 계속) */
+const myLogo = () => { try { return localStorage.getItem('bkEdLogo') || ''; } catch (e) { return ''; } };
+const logoSel = () => (P && P.logoSel) || (myLogo() ? 'mine' : 'app');
+const logoSrc = w => (w === 'mine' && myLogo()) || 'icon-192.png';
+function logoPick() {
+  const mine = myLogo();
+  return `<h4>아이콘 그림</h4><div class="lgp"><button type="button" data-a="logosel" data-v="app"${pressed(logoSel(), 'app')}><img src="icon-192.png" alt="">BK쇼츠 아이콘</button>${mine ? `<button type="button" data-a="logosel" data-v="mine"${pressed(logoSel(), 'mine')}><img src="${mine}" alt="">내 로고</button>` : ''}<label class="lgup">🖼 내 로고 ${mine ? '바꾸기' : '올리기'}<input type="file" data-a="logof" accept="image/*" hidden></label></div>`;
+}
+function creditBox(c) {
+  const C = P.credit || {}, on = !!C.on, mf = musFile(), st = timeline(P).st, i = P.clips.indexOf(c);
+  let h = mf && i >= 0 ? `<div class="grp"><h3>🎵 엔딩 길이</h3><button type="button" data-a="endfit" class="pri" style="width:100%">🎵 노래 끝(${fmt(mf.dur)})까지 엔딩 늘리기</button><p class="hint" style="margin:4px 0 0">지금 엔딩은 ${fmt(st[i])} ~ ${fmt(st[i] + clipLen(c))} · 🔒 잠가 둬도 엔딩 길이는 바꿀 수 있어요.</p></div>` : '';
+  h += `<div class="grp"><h3>✍️ 만든이 표시 <small>엔딩 아래쪽에 BK 아이콘 + 이름</small></h3>${chips('credon', [['1', '✅ 넣기'], ['0', '빼기']], on ? 1 : 0)}`;
+  if (on) h += `<input type="text" data-a="credt" value="${esc(C.text || 'BK AGENT · 비케이')}" placeholder="예: BK AGENT · 비케이 / 방극률 · 삼성생명 서문지점" style="margin-top:8px">
+    <h4>위치</h4>${chips('credpos', [['mid', '가운데 아래 (추천)'], ['bottom', '⬇ 맨 아래']], C.pos || 'mid')}<p class="hint" style="margin:4px 0 0">노래 가사 자막이 엔딩 아래에 나오면 「가운데 아래」가 겹치지 않아요.</p>${logoPick()}`;
+  return h + `</div>`;
+}
+function logoFile(f) {
+  const url = URL.createObjectURL(f), im = new Image();
+  im.onload = () => { try { const k = Math.min(1, 256 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); const d = cv.toDataURL('image/png'); localStorage.setItem('bkEdLogo', d); P.logoSel = 'mine'; if (P.credit) P.credit.logo = 'mine'; const im2 = new Image(); im2.onload = () => drawNow(); im2.src = d; commit(); renderPanel(); toast('🖼 내 로고를 올려 두었어요 · 다음 영상에서도 그대로 써요'); } catch (e) { toast('로고를 저장하지 못했어요 (그림이 너무 커요)'); } URL.revokeObjectURL(url); };
+  im.onerror = () => { URL.revokeObjectURL(url); toast('그림을 열 수 없어요'); }; im.src = url;
+}
+{ const im0 = new Image(); im0.onload = () => { if (P) drawNow(); }; im0.src = 'icon-192.png'; }
 function clipMenu(i) {
   const c = P.clips[i]; if (!c) return; SEL = i; renderTL();
   if (c.kind === 'card') { SHX = { i, id: c.id }; renderPanel(); return sheet(`<div class="shh"><span class="shth cpn">${c.card === 'title' ? '🎬' : '🏁'}</span><div><b>${i + 1}번 · ${c.card === 'title' ? '🎬 오프닝' : '🏁 엔딩'} 카드</b><small>${clipLen(c).toFixed(1)}초</small></div></div>
@@ -671,6 +693,13 @@ function tapStop(msg) {
 }
 function renderCut() {
   const el = $('cutbar'); if (!el || !P) return;
+  const LL = P.lyrics && P.lyrics.lines;
+  if (LYT >= 0 && LL && LL[LYT]) {   // 🎤 가사 톡톡: 화면 바로 아래에서 누르기
+    const cu = LL[LYT], nx = LL[LYT + 1];
+    el.className = 'cutbar tapping lyrtap';
+    el.innerHTML = `<button type="button" data-c="lyback" class="sm">↶<small>한 줄 전</small></button><button type="button" data-c="lynow" class="tapbig">${PLAY ? `👆 「${esc(cu.text.slice(0, 14))}」 시작<small>${LYT + 1} / ${LL.length}${nx ? ' · 다음: ' + esc(nx.text.slice(0, 12)) : ' · 마지막 줄'}</small>` : PSTART ? '⏳ 노래 준비 중…' : `▶ 이어서 톡톡<small>${LYT + 1}번 줄 「${esc(cu.text.slice(0, 12))}」부터</small>`}</button><button type="button" data-c="lystop" class="sm">■<small>그만</small></button>`;
+    cutInfo(); return;
+  }
   if (TAPC) {
     el.className = 'cutbar tapping';
     el.innerHTML = `<button type="button" data-c="tapback" class="sm">↩<small>다시</small></button><button type="button" data-c="tapnow" class="tapbig">${PLAY ? `👆 다음 장면!<small>장면 ${TAPC.i + 1} 여기서 끝</small>` : PSTART ? '⏳ 노래 준비 중…' : '▶ 이어서 톡톡'}</button><button type="button" data-c="tapstop" class="sm">■<small>그만</small></button>`;
@@ -687,9 +716,15 @@ function cutInfo() {
   el.textContent = `${fmt(T)} · ${A.i + 1}번 ${A.lt.toFixed(1)}/${clipLen(A.c).toFixed(1)}초`;
   const w = between(nearPos()), pa = $('pasteAt'), ta = $('trayAt'); if (pa) pa.textContent = w; if (ta) ta.textContent = w; lyNow();
 }
-$('cutbar').addEventListener('pointerdown', e => { const b = e.target.closest('[data-c="tapnow"]'); if (!b) return; e.preventDefault(); tapNow(); });
+$('cutbar').addEventListener('pointerdown', e => {
+  const b = e.target.closest('[data-c="tapnow"],[data-c="lynow"]'); if (!b) return; e.preventDefault();
+  if (b.dataset.c === 'tapnow') return tapNow();
+  if (LYT < 0) return; if (!PLAY) { if (!PSTART) play(); return; }
+  lyrCmd('lyrtap'); try { navigator.vibrate && navigator.vibrate(15); } catch (er) { /* 무시 */ }
+});
 $('cutbar').addEventListener('click', e => {
   const b = e.target.closest('[data-c]'); if (!b || !P) return; const k = b.dataset.c;
+  if (k === 'lyback') return lyrCmd('lyrtapback'); if (k === 'lystop') return lyrCmd('lyrtapstop');
   if (k === 'unlock') return lockToggle();
   if (isLocked() && /^(cut|ext|tap|blank|mode)$/.test(k)) return lockMsg();
   if (k === 'cut') return cutHere(); if (k === 'ext') return extHere(); if (k === 'tap') return tapStart(); if (k === 'blank') return blankSheet();
@@ -748,7 +783,7 @@ if (QM && MODES[QM]) { MODE = QM; TAB = MLAST[QM]; }
 function renderTabs() {
   $('modes').innerHTML = Object.entries(MODES).map(([k, v]) => `<button type="button" data-m="${k}"${pressed(MODE, k)}><b>${v[0]}</b>${v[1]} ${v[2]}</button>`).join('');
   $('tabs').innerHTML = MODES[MODE][3].map(([k, i, n]) => `<button type="button" data-tab="${k}"${pressed(TAB, k)}><span>${i}</span>${n}</button>`).join('');
-  $('cutbar').hidden = MODE !== 'song'; document.body.dataset.mode = MODE;
+  $('cutbar').hidden = !(MODE === 'song' || LYT >= 0); document.body.dataset.mode = MODE;
 }
 $('modes').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b) return; setTab(MLAST[b.dataset.m]); window.scrollTo({ top: 0, behavior: 'smooth' }); });
 $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (!b) return; setTab(b.dataset.tab); window.scrollTo({ top: 0, behavior: 'smooth' }); });
@@ -800,8 +835,8 @@ function pEdit(c) {
        <div class="grp"><h3>⏸ 마지막 화면 멈춤</h3>${chips('hold', { 0: '없음', 1: '1초', 2: '2초', 3: '3초' }, c.hold || 0)}</div>
        <div class="grp"><h3>⏱ 장면 길이 <small>0.1초 단위</small></h3>${lenBox(c)}</div>`;
     } else if (c.kind === 'image') h += c.blank ? '' : `<div class="grp"><h3>⏱ 보여 줄 시간 <small>0.1초 단위</small></h3>${range('dur', c.dur, .5, 30, .1, '초')}${lenBox(c)}<button type="button" data-a="alldur" class="sec">모든 사진을 ${(+c.dur).toFixed(1)}초로</button></div>`;
-    if (c.kind === 'card') { const bm = c.bgMode || (c.bgSrc ? 'blur' : 'auto'), bs = c.bgSrc && SRC.get(c.bgSrc); h += `<div class="grp cardpic"><h3>🖼 ${c.card === 'title' ? '오프닝' : '엔딩'} 배경 사진</h3><div class="cpr">${bs ? `<span class="shth" data-gth="${c.bgSrc}"></span>` : '<span class="shth cpn">🖼</span>'}<div><b>${bs ? esc(srcCode(c.bgSrc)) + ' 사진' : c.card === 'title' ? '자동 (📌 첫 화면 고정 사진 · 없으면 첫 사진)' : '자동 (🏁 엔딩 고정 사진)'}</b><button type="button" data-a="cardpic" class="pri">🖼 사진 고르기</button></div></div>${chips('cardbg', [['blur', '흐리게 깔기'], ['clear', '선명하게'], ['none', '사진 없이']], bm)}<p class="hint" style="margin:4px 0 0">글자는 ④ 💾 저장 › 🏷 카드·정보에서 고쳐요.</p></div>`; }
-    if (c.kind === 'card') h += `<div class="grp"><h3>⏱ 카드 시간</h3>${range('dur', c.dur, 1, 20, .1, '초')}${lenBox(c)}<p class="hint">카드 글자는 <b>🏷 정보</b> 탭에서 고쳐요.</p><button type="button" data-a="goinfo" class="sec">🏷 정보 탭 열기</button></div>`;
+    if (c.kind === 'card') { const bm = c.bgMode || (c.bgSrc ? 'blur' : 'auto'), bs = c.bgSrc && SRC.get(c.bgSrc); h += `<div class="grp cardpic"><h3>🖼 ${c.card === 'title' ? '오프닝' : '엔딩'} 배경 사진</h3><div class="cpr">${bs ? `<span class="shth" data-gth="${c.bgSrc}"></span>` : '<span class="shth cpn">🖼</span>'}<div><b>${bs ? esc(srcCode(c.bgSrc)) + ' 사진' : c.card === 'title' ? '자동 (📌 첫 화면 고정 사진 · 없으면 첫 사진)' : '자동 (🏁 엔딩 고정 사진)'}</b><button type="button" data-a="cardpic" class="pri">🖼 사진 고르기</button></div></div>${chips('cardbg', [['blur', '흐리게 깔기'], ['clear', '선명하게'], ['none', '사진 없이']], bm)}<p class="hint" style="margin:4px 0 0">글자는 ④ 💾 저장 › 🏷 카드·정보에서 고쳐요.</p></div>`; if (c.card !== 'title') h += creditBox(c); }
+    if (c.kind === 'card') h += `<div class="grp"><h3>⏱ 카드 시간</h3>${range('dur', c.dur, 1, 60, .1, '초')}${lenBox(c)}<p class="hint">카드 글자는 <b>🏷 정보</b> 탭에서 고쳐요.</p><button type="button" data-a="goinfo" class="sec">🏷 정보 탭 열기</button></div>`;
     if (c.kind !== 'card') h += `<div class="grp"><h3>🖼 화면에 맞추기</h3>${chips('fit', { auto: '자동 (흐린 배경)', cover: '꽉 채우기', contain: '전체 보이기 (검은 배경)' }, c.fit)}<button type="button" data-a="focus" class="sec">📍 ${FOCUS ? '화면을 눌러 주세요…' : '보일 중심 맞추기 (얼굴이 잘릴 때)'}</button></div>`;
     h += `<div class="grp"><h3>🔀 넘어가는 효과 <small>${c.trans === 'auto' || !c.trans ? '전체 방식대로' : esc(TRANS[c.trans] || c.trans)}</small></h3><button type="button" data-a="gotab" data-v="trans" class="sec">🔀 전환 탭에서 고르기 · 미리보기</button></div>`;
   }
@@ -827,7 +862,7 @@ function pCap(c) {
 }
 /* ── 😀 스티커 ── */
 function pStk(c) {
-  let h = head(c); if (!c || c.kind === 'card') return h + (c ? '<p class="empty">카드에는 스티커를 넣을 수 없어요.</p>' : '');
+  let h = head(c); if (!c) return h;
   const B = ED.brand();
   if (SELOV && SELOV.type === 'stk' && c.stk[SELOV.k]) {
     const s = c.stk[SELOV.k];
@@ -837,10 +872,11 @@ function pStk(c) {
     h += `<div class="grp selbox"><h3>🫥 고른 가림 상자</h3>${range('bw', b.w, .05, 1, .01, '가로')}${range('bh', b.h, .05, 1, .01, '세로')}<button type="button" data-a="bdel" class="dg">🗑 이 상자 지우기</button></div>`;
   }
   h += `<p class="hint">넣은 다음 미리보기에서 <b>손가락으로 끌어</b> 옮기고, 눌러서 크기를 바꿔요.</p>
+   <div class="grp bkst"><h3>🅑 BK 표시</h3><div class="btns2"><button type="button" data-a="bklogo"><img src="${logoSrc(logoSel())}" alt="">BK 아이콘</button><button type="button" data-a="bkname"><span class="bkn">BK AGENT</span></button></div>${logoPick()}</div>
    <div class="grp"><h3>😀 이모지</h3><div class="emo">${EMOJI.map(e => `<button type="button" data-a="emo" data-v="${e}">${e}</button>`).join('')}</div></div>
    <div class="grp"><h3>🏷 글씨 배지</h3><input type="text" id="bdTxt" placeholder="배지에 쓸 글씨 (예: 20% 할인, 아메리카노 4,500원)">${chips('badge', BADGES, '')}
     ${B && B.menu ? `<h4>📋 메뉴로 가격표 넣기</h4><div class="chips">${B.menu.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 20).map(m => `<button type="button" data-a="menu" data-v="${esc(m)}">💰 ${esc(m)}</button>`).join('')}</div>` : ''}</div>
-   <div class="grp"><h3>🫥 얼굴 · 번호판 가리기</h3><button type="button" data-a="blur" class="sec">＋ 모자이크 상자 넣기</button><p class="hint">손님 얼굴이 나오면 가려 주세요 (초상권).</p></div>`;
+   ${c.kind === 'card' ? '' : `<div class="grp"><h3>🫥 얼굴 · 번호판 가리기</h3><button type="button" data-a="blur" class="sec">＋ 모자이크 상자 넣기</button><p class="hint">손님 얼굴이 나오면 가려 주세요 (초상권).</p></div>`}`;
   return h;
 }
 /* ── ✨ 효과 ── */
@@ -1178,7 +1214,12 @@ function lyrBox() {
   }
   return h + '</div>';
 }
-function lyrCmd(a, v) {
+function lyrCmd(a, v) {   // 가사 톡톡을 시작 · 끝낼 때 화면 아래 버튼 줄도 바꿔요
+  const r = lyrCmd0(a, v);
+  if (/^lyr(tap|from)/.test(a)) { $('cutbar').hidden = !(MODE === 'song' || LYT >= 0); renderCut(); }
+  return r;
+}
+function lyrCmd0(a, v) {
   const mf = musFile(); if (!mf) return toast('먼저 📁 내 음악 파일을 넣어 주세요');
   P.lyrics = P.lyrics || { on: 1, lines: [], raw: '', style: 'karaoke', pos: 'bottom' }; const Ly = P.lyrics;
   if (a === 'lyrset') { const r = lyrParse(Ly.raw); if (!r.lines.length) return toast('가사를 먼저 붙여넣어 주세요'); Ly.lines = r.lines; Ly.timed = r.timed; Ly.rawSet = Ly.raw; if (!r.timed) lyrSpread(Ly.lines, mf.dur); Ly.lines.sort((p, q) => p.t - q.t); Ly.on = 1; commit(); renderPanel(); return toast(r.timed ? `🎤 가사 ${Ly.lines.length}줄을 시간에 맞춰 넣었어요 · ▶로 확인해 보세요` : `🎤 가사 ${Ly.lines.length}줄을 고르게 나눴어요 · 「👆 톡톡 맞추기」로 정확히 맞출 수 있어요`, 4500); }
@@ -1388,6 +1429,7 @@ $('panel').addEventListener('input', e => {
   if (a === 'out' && c) { c.out = Math.max(+v, c.in + .2); out.textContent = fmt(c.out); T = timeline(P).st[SEL] + clipLen(c) - (c.hold || 0) - .05; drawNow(); return; }
   if (a === 'dur' && c) { setEnd(SEL, timeline(P).st[SEL] + +v); drawNow(); return; }
   if (a === 'tdur') { P.transDur = +v; return; }
+  if (a === 'credt') { if (P.credit) { P.credit.text = v; drawNow(); } return; }
   if (a === 'vol' && c) { c.vol = +v; return; } if (a === 'mvol') { P.music.vol = +v; return; } if (a === 'cvol') { P.clipVol = +v; return; } if (a === 'vovol' && c && c.vo) { c.vo.vol = +v; return; }
   if (a === 'size') { P.capDef.size = +v; drawNow(); return; } if (a === 'csize' && c) { c.cap.size = +v; drawNow(); return; }
   if (a === 'ss' && c && SELOV) { c.stk[SELOV.k].s = +v; drawNow(); return; } if (a === 'sv' && c && SELOV) { c.stk[SELOV.k].v = v; drawNow(); return; }
@@ -1405,6 +1447,7 @@ $('panel').addEventListener('change', async e => {
     const fs = Array.from(el.files || []); el.value = ''; if (!fs.length) return;
     if (a === 'blankf') return blankFiles(fs);
     if (a === 'trayf') return trayFiles(fs);
+    if (a === 'logof') return logoFile(fs[0]);
     if (a === 'addf') { const pos = insPos(), n = await addFiles(fs, pos); commit(); if (n && pos != null) select(pos, true); else renderPanel(); toast(pos == null ? `＋ ${n}개를 맨 뒤에 넣었어요` : `＋ ${n}개를 장면 ${pos + 1} 자리(커서 앞)에 넣었어요`, 3500); }
     if (a === 'musf') { const f = fs[0], id = uid('s'), meta = { id, code: 'A' + (P.nA++), kind: 'audio', name: f.name }; busy('음악 여는 중…'); const s = await ED.loadSource(meta, f); busy(''); if (!s.buf) return toast('음악 파일을 열 수 없어요 (MP3 · M4A 권장)'); meta.dur = s.dur; P.srcs.push(meta); try { await IDB.put('f', id, f); } catch (er) { /* 공간 */ } P.music.kind = 'file'; P.music.fileId = id; commit(); renderPanel(); toast(timeline(P).total < s.dur - 3 ? '🎵 내 음악을 넣었어요 · 노래가 영상보다 길어요 → 아래 「노래 끝까지 자동 맞추기」를 눌러 보세요' : '🎵 내 음악을 넣었어요', 4500); }
     if (a === 'logo') { const f = fs[0], url = URL.createObjectURL(f), im = await ENG.loadImage(url), k = Math.min(1, 360 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); const L = ED.brands(), b = L.find(x => x.id === P.info.brandId); if (b) { b.logo = cv.toDataURL('image/png'); ED.saveBrands(L); } commit(); renderPanel(); }
@@ -1423,6 +1466,12 @@ $('panel').addEventListener('click', async e => {
     case 'blanknext': { const B = blanks(); if (!B.length) return toast('빈칸이 없어요'); const j = B.find(i => i > SEL); return select(j != null ? j : B[0], true); }
     case 'blankdelall': { const B = blanks(); if (!B.length || !confirm2(`빈 장면 ${B.length}개를 전부 지울까요?\n(뒤 사진들이 다시 앞으로 당겨져요 · ↩️ 되돌리기 가능)`)) return; P.clips = P.clips.filter(x => !x.blank); SEL = Math.min(SEL, P.clips.length - 1); T = Math.min(T, timeline(P).total); toast('🗑 빈칸을 전부 지웠어요'); return re(); }
     case 'lenn': return lenNudge(+v);
+    case 'endfit': { const mf = musFile(); if (!c || !mf) return; const i = SEL, st0 = timeline(P).st[i], L = Math.round((mf.dur - st0) * 100) / 100; if (L < 1) return toast('엔딩이 이미 노래 끝까지 와 있어요'); c.dur = L; commit(); renderPanel(); return toast(`🎵 엔딩을 ${L.toFixed(1)}초로 — 노래 끝까지 나와요`); }
+    case 'credon': P.credit = Object.assign({ text: 'BK AGENT · 비케이', pos: 'mid', logo: logoSel() }, P.credit || {}, { on: v === '1' ? 1 : 0 }); if (c && c.kind === 'card') T = timeline(P).st[SEL] + Math.min(clipLen(c) - .3, 2.5); return re();
+    case 'credpos': if (P.credit) P.credit.pos = v; return re();
+    case 'logosel': P.logoSel = v; if (P.credit) P.credit.logo = v; return re();
+    case 'bklogo': if (!c) return toast('장면을 먼저 골라 주세요'); c.stk.push({ k: 'logo', src: logoSel(), x: .82, y: .1, s: .9, a: 'pop' }); SELOV = { type: 'stk', k: c.stk.length - 1 }; return re();
+    case 'bkname': if (!c) return toast('장면을 먼저 골라 주세요'); c.stk.push({ k: 'badge', b: 'bk', v: 'BK AGENT', x: .5, y: .78, s: 1, a: 'pop' }); SELOV = { type: 'stk', k: c.stk.length - 1 }; return re();
     case 'lock': return lockToggle();
     case 'lockrest': return lockRestore();
     case 'tprev': return transPrev();
@@ -1517,9 +1566,9 @@ $('panel').addEventListener('click', async e => {
     case 'anim': P.capDef.anim = v; return re();
     case 'capall': { const L = $('capAll').value.split('\n'); let k = 0; P.clips.forEach(x => { if (x.kind === 'card') return; x.cap.t = (L[k] || '').replace(/\s\/\s/g, '\n').trim(); k++; }); toast('✅ 순서대로 넣었어요 (비운 줄은 자막 없음)'); return re(); }
     case 'capclr': { if (!confirm('장면 자막을 전부 지울까요?\n(노래 가사 자막은 그대로 · ↩ 되돌리기로 살릴 수 있어요)')) return; P.clips.forEach(x => { if (x.kind !== 'card' && x.cap) x.cap.t = ''; }); toast('🗑 장면 자막을 전부 지웠어요'); return re(); }
-    case 'emo': if (c && c.kind !== 'card') { c.stk.push({ k: 'emoji', v, x: .5 + (Math.random() - .5) * .2, y: .4 + (Math.random() - .5) * .2, s: 1, a: 'pop' }); SELOV = { type: 'stk', k: c.stk.length - 1 }; return re(); } return toast('장면을 먼저 골라 주세요');
+    case 'emo': if (c) { c.stk.push({ k: 'emoji', v, x: .5 + (Math.random() - .5) * .2, y: .4 + (Math.random() - .5) * .2, s: 1, a: 'pop' }); SELOV = { type: 'stk', k: c.stk.length - 1 }; return re(); } return toast('장면을 먼저 골라 주세요');
     case 'badge': case 'menu': {
-      if (!c || c.kind === 'card') return toast('장면을 먼저 골라 주세요');
+      if (!c) return toast('장면을 먼저 골라 주세요');
       const B = ED.brand(), tv = ($('bdTxt') || {}).value || '';
       let txt = a === 'menu' ? v : tv || ({ pin: B && B.addr, phone: B && B.phone, qr: B && B.link, sale: B && B.event }[v]) || '';
       c.stk.push({ k: 'badge', b: a === 'menu' ? 'price' : v, v: txt, x: .5, y: a === 'menu' || v === 'price' ? .7 : .35, s: v === 'qr' ? .9 : 1, a: 'pop' }); SELOV = { type: 'stk', k: c.stk.length - 1 }; return re();

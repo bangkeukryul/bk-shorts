@@ -206,10 +206,8 @@ function drawFrame(x, W, H, t, opt) {
     x.restore();
   } else drawLayer(x, W, H, A.i, lt, false);
   const hits = [];
-  if (c.kind !== 'card') {
-    for (let k = 0; k < (c.blur || []).length; k++) hits.push(drawBlur(x, W, H, c.blur[k], k));
-    for (let k = 0; k < (c.stk || []).length; k++) hits.push(drawSticker(x, W, H, c.stk[k], still ? Math.max(lt, .5) : lt, len, k));
-  }
+  if (c.kind !== 'card') for (let k = 0; k < (c.blur || []).length; k++) hits.push(drawBlur(x, W, H, c.blur[k], k));
+  for (let k = 0; k < (c.stk || []).length; k++) hits.push(drawSticker(x, W, H, c.stk[k], still ? Math.max(lt, .5) : lt, len, k));   // 오프닝 · 엔딩 카드에도 스티커
   const cb = drawCaption(x, W, H, c, lt, len, still); if (cb) hits.push(cb);
   drawLyrics(x, W, H, t);
   drawWatermark(x, W, H, c);
@@ -309,7 +307,8 @@ function drawSticker(x, W, H, s, lt, len, k) {
   const cx = s.x * W, cy = s.y * H + dy;
   x.save(); x.translate(cx, cy); x.rotate(rot); x.scale(sc, sc); x.textAlign = 'center'; x.textBaseline = 'middle';
   let w = base, h = base;
-  if (s.k === 'emoji') { x.font = `${base}px ${EMO}`; x.fillText(s.v || '😂', 0, base * .05); }
+  if (s.k === 'logo') { const im = bkLogo(s.src); if (im && im.complete && im.naturalWidth) { const k2 = base / Math.max(im.naturalWidth, im.naturalHeight), iw = im.naturalWidth * k2, ih = im.naturalHeight * k2; x.save(); rr(x, -iw / 2, -ih / 2, iw, ih, Math.min(iw, ih) * .22); x.clip(); x.drawImage(im, -iw / 2, -ih / 2, iw, ih); x.restore(); w = iw; h = ih; } }
+  else if (s.k === 'emoji') { x.font = `${base}px ${EMO}`; x.fillText(s.v || '😂', 0, base * .05); }
   else {
     const b = s.b, v = s.v || '', fs = base * .3;
     if (b === 'sale') { starPath(x, base * .62, base * .48, 14); x.fillStyle = '#ef4444'; x.fill(); x.strokeStyle = '#fff'; x.lineWidth = base * .04; x.stroke(); x.fillStyle = '#fff'; x.font = fspec('blackhan', fs * .95); const L = wrap(x, v || '할인', base * .85); L.forEach((l, i) => x.fillText(l, 0, (i - (L.length - 1) / 2) * fs * 1.1)); w = h = base * 1.25; }
@@ -317,11 +316,11 @@ function drawSticker(x, W, H, s, lt, len, k) {
     else if (b === 'qr') { const q = qrCanvas(v || 'https://bangkeukryul.github.io/'); const sz = base * 1.1; x.fillStyle = '#fff'; rr(x, -sz / 2 - 8, -sz / 2 - 8, sz + 16, sz + 16 + fs, 12); x.fill(); if (q) { x.imageSmoothingEnabled = false; x.drawImage(q, -sz / 2, -sz / 2, sz, sz); } x.fillStyle = '#111'; x.font = fspec('noto', fs * .55); x.fillText('찍어 보세요', 0, sz / 2 + fs * .45); w = sz + 16; h = sz + 16 + fs; }
     else if (b === 'arrow') { x.font = `${base}px ${EMO}`; x.fillText(v || '👉', 0, base * .05); }
     else {
-      const pre = b === 'pin' ? '📍 ' : b === 'phone' ? '📞 ' : '', t = pre + (v || BADGE_DEF[b] || ''), font = b === 'text' ? fspec('blackhan', fs * 1.25) : fspec(b === 'price' ? 'blackhan' : 'noto', fs);
+      const pre = b === 'pin' ? '📍 ' : b === 'phone' ? '📞 ' : '', t = pre + (v || BADGE_DEF[b] || ''), font = b === 'text' ? fspec('blackhan', fs * 1.25) : fspec(b === 'price' || b === 'bk' ? 'blackhan' : 'noto', fs);
       x.font = font; const tw = x.measureText(t).width, pw = tw + fs * 1.2, ph = fs * (b === 'text' ? 1.9 : 1.75);
       if (b === 'text') { x.lineJoin = 'round'; x.strokeStyle = '#111'; x.lineWidth = fs * .3; x.strokeText(t, 0, 0); x.fillStyle = '#ffe14d'; x.fillText(t, 0, 0); }
       else {
-        const bg = { price: '#ffdd00', pin: '#ffffff', phone: '#16a34a' }[b] || '#fff', fg = { price: '#111', pin: '#111', phone: '#fff' }[b] || '#111';
+        const bg = { price: '#ffdd00', pin: '#ffffff', phone: '#16a34a', bk: '#6d28d9' }[b] || '#fff', fg = { price: '#111', pin: '#111', phone: '#fff', bk: '#fff' }[b] || '#111';
         x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = fs * .5; x.fillStyle = bg; rr(x, -pw / 2, -ph / 2, pw, ph, ph / 2); x.fill(); x.shadowBlur = 0; x.shadowColor = 'transparent';
         if (b === 'price') { x.strokeStyle = '#111'; x.lineWidth = fs * .08; x.stroke(); }
         x.fillStyle = fg; x.fillText(t, 0, fs * .05);
@@ -332,9 +331,26 @@ function drawSticker(x, W, H, s, lt, len, k) {
   x.restore();
   return { type: 'stk', k, l: cx - w * sc / 2, t: cy - h * sc / 2, w: w * sc, h: h * sc };
 }
-const BADGE_DEF = { price: '가격', pin: '주소', phone: '전화번호', text: '글씨' };
+const BADGE_DEF = { price: '가격', pin: '주소', phone: '전화번호', text: '글씨', bk: 'BK AGENT' };
 ED.drawSticker = drawSticker;
 
+/* ═════════ 🅑 BK 아이콘 (BK쇼츠 앱 아이콘 / 내 로고) · ✍️ 엔딩 만든이 표시 ═════════ */
+function bkLogo(which) { let d = null; if (which === 'mine') { try { d = localStorage.getItem('bkEdLogo'); } catch (e) { /* 무시 */ } } return imgFromData(d || 'icon-192.png'); }
+ED.bkLogo = bkLogo;
+function drawCredit(x, W, H, m, al, type) {
+  const C = ED.P.credit; if (!C || !C.on) return;
+  const im = bkLogo(C.logo), t = (C.text || 'BK AGENT · 비케이').trim(), fs = m * .038, s = m * .085;
+  x.save(); x.globalAlpha = clamp(al, 0, 1); x.font = fspec('noto', fs); x.textAlign = 'left'; x.textBaseline = 'middle';
+  const lead = '만든이  ', lw = x.measureText(lead).width; x.font = fspec('blackhan', fs * 1.1); const tw = x.measureText(t).width;
+  const ok = im && im.complete && im.naturalWidth, iw = ok ? s : 0, gap = ok ? m * .02 : 0, pw = iw + gap + lw + tw + m * .06, ph = s + m * .02;
+  const cy = C.pos !== 'bottom' ? H * .68 : (type === 'store' || type === 'company') ? H * .965 - ph / 2 : H * .95 - ph / 2, x0 = W / 2 - pw / 2;
+  x.fillStyle = 'rgba(0,0,0,.42)'; rr(x, x0, cy - ph / 2, pw, ph, ph / 2); x.fill();
+  let cx = x0 + m * .03;
+  if (ok) { x.save(); rr(x, cx, cy - s / 2, s, s, s * .22); x.clip(); x.drawImage(im, cx, cy - s / 2, s, s); x.restore(); cx += s + gap; }
+  x.font = fspec('noto', fs); x.fillStyle = '#e9d5ff'; x.fillText(lead, cx, cy); cx += lw;
+  x.font = fspec('blackhan', fs * 1.1); x.fillStyle = '#ffffff'; x.fillText(t, cx, cy);
+  x.restore();
+}
 /* ═════════ 워터마크 (가게 로고) ═════════ */
 function drawWatermark(x, W, H, c) {
   const P = ED.P, B = brand(); if (!P.wm || !B || !B.logo || c.kind === 'card') return;
@@ -419,6 +435,7 @@ function drawCard(x, W, H, c, lt, len) {
     x.globalAlpha = out * a(.1); txt(x, I.ending || '감사합니다', m * .085, ff, '#ffffff', W / 2, H * .46, W * .84, { lh: 1.4 });
     if (I.sub) { x.globalAlpha = out * a(.6); txt(x, I.sub, m * .045, 'noto', '#e2e8f0', W / 2, H * .46 + m * .15, W * .8); }
   }
+  if (type !== 'title') drawCredit(x, W, H, m, out * a(.8), type);
   x.restore();
 }
 ED.drawCard = drawCard;

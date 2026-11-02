@@ -173,3 +173,12 @@ button.lnk{border:0;background:none;color:var(--ac2);font-weight:800;text-decora
 .cardpic .shth{flex:none;width:64px;height:64px;border-radius:10px;overflow:hidden;background:#2a2140}.cardpic .shth canvas{width:100%;height:100%;display:block}
 /* 빨간 세로줄은 눌러도 그냥 지나가게 (사진 · 오프닝 카드를 누를 수 있게) — 아래 동그라미만 잡혀요 */
 #ph{pointer-events:none}#ph::before{display:none}#ph b{pointer-events:auto;touch-action:none}
+/* v40: 화면 폭 넘침 고침 · 가사 톡톡 버튼 · BK 표시 */
+.stage{grid-template-columns:minmax(0,1fr)}.stage>*{max-width:100%;min-width:0}
+.qbar{min-width:0}.qbar .cbi{flex:1 1 0;min-width:0;width:0}.fine button{min-width:0}
+@media(max-width:400px){.qbar{gap:4px}.qbar button{padding:5px 6px;font-size:.78rem}.qbar .cbi{font-size:.7rem}}
+.cutbar.lyrtap .tapbig{font-size:1.02rem;line-height:1.25;padding:6px 6px}.cutbar.lyrtap .tapbig small{font-size:.72rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bkst .btns2 button{display:flex;align-items:center;justify-content:center;gap:6px}.bkst img,.lgp img{width:28px;height:28px;border-radius:7px;object-fit:cover}
+.bkn{display:inline-block;background:#6d28d9;color:#fff;border-radius:999px;padding:3px 12px;font-weight:900;letter-spacing:.5px}
+.lgp{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.lgp button{display:flex;align-items:center;gap:6px;border:1.5px solid var(--ln);background:#fff;border-radius:12px;padding:5px 10px 5px 5px;font-weight:700;font-size:.84rem;cursor:pointer}.lgp button[aria-pressed=true]{border-color:var(--ac);background:#f3edff}
+.lgup{display:inline-block;border:1.5px dashed #c4b5fd;border-radius:12px;padding:9px 12px;font-weight:800;font-size:.84rem;color:#6d28d9;cursor:pointer;background:#fff}
