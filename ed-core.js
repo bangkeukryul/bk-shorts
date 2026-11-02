@@ -141,8 +141,15 @@ async function loadSource(meta, blob) {
     try { bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch (e) { bmp = await ENG.loadImage(s.url); }
     // 너무 큰 사진은 줄여서 (메모리)
     const mx = 2160, k = Math.min(1, mx / Math.max(bmp.width, bmp.height));
-    if (k < 1) { const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k); c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height); if (bmp.close) bmp.close(); bmp = c; }
+    if (k < 1) {
+      let ok = null; try { ok = await createImageBitmap(bmp, { resizeWidth: Math.round(bmp.width * k), resizeHeight: Math.round(bmp.height * k), resizeQuality: 'high' }); } catch (e) { ok = null; }
+      if (!ok) { ok = document.createElement('canvas'); ok.width = Math.round(bmp.width * k); ok.height = Math.round(bmp.height * k); ok.getContext('2d').drawImage(bmp, 0, 0, ok.width, ok.height); }
+      if (bmp.close) bmp.close(); bmp = ok;
+    }
     s.img = bmp; s.w = bmp.width; s.h = bmp.height; s.dur = 0;
+    /* ⚡ 미리보기용 작은 사본 (휴대폰이 큰 사진을 그리다 멈칫하지 않게 · 완성 영상은 큰 사진으로) */
+    const pk = Math.min(1, 1280 / Math.max(s.w, s.h)); s.pv = s.img;
+    if (pk < 1) { try { s.pv = await createImageBitmap(s.img, { resizeWidth: Math.round(s.w * pk), resizeHeight: Math.round(s.h * pk), resizeQuality: 'medium' }); } catch (e) { try { const pc = document.createElement('canvas'); pc.width = Math.round(s.w * pk); pc.height = Math.round(s.h * pk); pc.getContext('2d').drawImage(s.img, 0, 0, pc.width, pc.height); s.pv = pc; } catch (e2) { s.pv = s.img; } } }
   } else if (s.kind === 'video') {
     s.vid = vidEl(s.url); await waitMeta(s.vid);
     s.dur = s.vid.duration; s.w = s.vid.videoWidth || 1280; s.h = s.vid.videoHeight || 720;

@@ -61,7 +61,7 @@ function wrap(x, text, maxW) {
 function srcEl(c, endRaw) {
   if (c.kind === 'card') return null;
   const s = SRC.get(c.src); if (!s) return null;
-  if (s.kind === 'image') return { el: s.img, w: s.w, h: s.h };
+  if (s.kind === 'image') return { el: (ED._pv && s.pv) || s.img, w: s.w, h: s.h };   // 미리보기는 작은 사본
   if (endRaw) { const e = ED.endRaw.get(c.id); if (e && e.key === endKey(c)) return { el: e.c, w: e.c.width, h: e.c.height }; return null; }
   if (s.vid.readyState < 2) return null;
   return { el: s.vid, w: s.w, h: s.h };
@@ -361,7 +361,7 @@ function drawWatermark(x, W, H, c) {
 
 /* ═════════ 제목 · 엔딩 카드 ═════════ */
 const CTA = { store: '지금 방문하세요!', menu: '오늘 맛보러 오세요!', product: '지금 만나 보세요!', realty: '문의 환영합니다', company: '감사합니다', me: '편하게 연락 주세요' };
-function pinMedia(kind) { const P = ED.P, c = P.clips.find(x => x.pin === kind); if (!c) return null; const s = SRC.get(c.src); return s ? (s.img || (ED.thumbs && ED.thumbs.get(c.src)) || null) : null; }
+function pinMedia(kind) { const P = ED.P, c = P.clips.find(x => x.pin === kind); if (!c) return null; const s = SRC.get(c.src); return s ? ((ED._pv && s.pv) || s.img || (ED.thumbs && ED.thumbs.get(c.src)) || null) : null; }
 function firstMedia() { const P = ED.P, pm = pinMedia('first'); if (pm) return pm; for (const c of P.clips) { if (c.kind === 'image') { const s = SRC.get(c.src); if (s) return s.img; } } for (const c of P.clips) if (c.kind === 'video') { const e = ED.thumbs && ED.thumbs.get(c.src); if (e) return e; } return null; }
 function cardBg(x, W, H, type, B, isEnd, c) {
   const P = ED.P;
