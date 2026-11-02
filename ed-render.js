@@ -61,7 +61,7 @@ function wrap(x, text, maxW) {
 function srcEl(c, endRaw) {
   if (c.kind === 'card') return null;
   const s = SRC.get(c.src); if (!s) return null;
-  if (s.kind === 'image') return { el: (ED._pv && s.pv) || s.img, w: s.w, h: s.h };   // 미리보기는 작은 사본
+  if (s.kind === 'image') return { el: (!ED._pv && s.full) || s.img, w: s.w, h: s.h };   // 완성 영상은 큰 사진 (있으면)
   if (endRaw) { const e = ED.endRaw.get(c.id); if (e && e.key === endKey(c)) return { el: e.c, w: e.c.width, h: e.c.height }; return null; }
   if (s.vid.readyState < 2) return null;
   return { el: s.vid, w: s.w, h: s.h };
@@ -559,10 +559,13 @@ async function exportMp4(ratio, q, onProg, ctl) {
   const ve = new VideoEncoder({ output: (c, m) => mux.addVideoChunk(c, m), error: e => { err = e; } }); ve.configure(vcfg);
   const nF = Math.max(1, Math.round(total * fps)), fd = Math.round(1e6 / fps), t0 = performance.now();
   for (const s of SRC.values()) if (s.vid) s.vid.pause();
+  let lastI = -1;
   try {
     for (let i = 0; i < nF; i++) {
       if (ctl.aborted) throw new Error('취소했어요.'); if (err) throw err;
       const t = i / fps, A = clipAt(P, t);
+      if (A.i !== lastI) { lastI = A.i; const need = new Set(); for (let q = A.i - 1; q <= A.i + 1; q++) { const cq = P.clips[q]; if (cq && cq.kind === 'image' && cq.src) need.add(cq.src); }   // 큰 사진은 지금 · 앞뒤 장면만
+        for (const s of SRC.values()) if (s.full && !need.has(s.id)) ED.dropFull(s); for (const id of need) await ED.ensureFull(SRC.get(id)); }
       if (A.c && A.c.kind === 'video') { const s = SRC.get(A.c.src); if (s) await ENG.seekVideo(s.vid, srcTime(A.c, A.lt)); }
       drawFrame(x, W, H, t);
       const vf = new VideoFrame(cv, { timestamp: Math.round(i * 1e6 / fps), duration: fd }); ve.encode(vf, { keyFrame: i % (fps * 2) === 0 }); vf.close();
@@ -570,7 +573,7 @@ async function exportMp4(ratio, q, onProg, ctl) {
       if (i % 6 === 0 || i === nF - 1) { onProg && onProg((i + 1) / nF, (performance.now() - t0) / 1000, 'video'); await sleep(0); }
     }
     await ve.flush(); if (err) throw err;
-  } finally { try { ve.close(); } catch (e) { /* 닫힘 */ } cv.width = cv.height = 0; }
+  } finally { try { ve.close(); } catch (e) { /* 닫힘 */ } cv.width = cv.height = 0; for (const s of SRC.values()) ED.dropFull(s); }
   return { blob: new Blob(mux.finalize(), { type: 'video/mp4' }), W, H, warning };
 }
 ED.exportMp4 = exportMp4;

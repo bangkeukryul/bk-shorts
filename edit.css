@@ -195,4 +195,11 @@ body.easy .app{padding-bottom:calc(30px + env(safe-area-inset-bottom))}
 .btns3{display:grid;grid-template-columns:1fr 1.4fr 1fr;gap:6px}.btns3 button{border:0;border-radius:12px;padding:11px 4px;font-weight:800;font-size:.86rem;background:#efe9fb;color:#4c2a9e;cursor:pointer}.btns3 button.pri{background:var(--ac);color:#fff}.btns3 button:disabled{opacity:.4}
 .pstrip{display:flex;gap:5px;overflow-x:auto;padding:2px 2px 8px;margin-bottom:6px;-webkit-overflow-scrolling:touch}.pst{flex:none;width:52px;border:2px solid var(--ln);border-radius:9px;padding:0;background:#fff;cursor:pointer;overflow:hidden}.pst span{display:block;width:100%;height:46px;background:#2a2140}.pst canvas{width:100%;height:100%;display:block}.pst small{display:block;font-size:.66rem;font-weight:800;line-height:1.2;padding:2px 0;color:#4c2a9e}
 .pst.no small{color:#dc2626}.pst.on{border-color:var(--ac);box-shadow:0 0 0 3px rgba(139,92,246,.35)}.pdone{background:#dcfce7;color:#166534;border-radius:6px;padding:0 6px;font-weight:800}
-.pairhd .shth{width:110px!important;height:110px!important}
+.pairhd .shth{width:64px!important;height:64px!important}
+/* v45: 사진 → 가사 고르기 단순하게 */
+.pbar{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}.pbar b{font-size:1.1rem;color:var(--ac2)}.pbar span{font-size:.82rem;color:var(--mu);font-weight:700}
+.pcand{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:2px solid var(--ln);background:#fff;border-radius:14px;padding:10px 12px;margin-top:6px;cursor:pointer;font-size:1rem;line-height:1.35}
+.pcand b{flex:none;min-width:30px;height:30px;border-radius:15px;background:#ede9fe;color:#6d28d9;display:grid;place-items:center;font-size:.85rem;font-weight:900}.pcand span{flex:1;font-weight:700}.pcand small{flex:none;color:var(--mu);font-size:.75rem}
+.pcand.sel{border-color:var(--ac);background:#f3edff}.pcand.sel b{background:var(--ac);color:#fff}.pcand.cur{box-shadow:0 0 0 3px #22c55e inset}.pcand.intro,.pcand.out{background:#fffbeb;border-color:#fcd34d}
+.pmore{display:block;width:100%;border:1.5px dashed #c4b5fd;background:#fff;border-radius:12px;padding:9px;margin-top:6px;font-weight:800;color:#6d28d9;cursor:pointer}
+.plist{margin-top:10px}.plist summary{cursor:pointer;font-weight:800;color:var(--ac2);font-size:.88rem;padding:4px 0}

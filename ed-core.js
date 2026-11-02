@@ -137,19 +137,17 @@ function waitMeta(v) {
 async function loadSource(meta, blob) {
   const s = Object.assign({}, meta, { file: blob, url: URL.createObjectURL(blob) });
   if (s.kind === 'image') {
+    /* 📱 휴대폰 메모리 아끼기: 평소에는 1080 크기 하나만 들고 있고, 완성 영상 만들 때만 큰 사진(2160)을 잠깐씩 꺼내요 */
     let bmp = null;
     try { bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch (e) { bmp = await ENG.loadImage(s.url); }
-    // 너무 큰 사진은 줄여서 (메모리)
-    const mx = 2160, k = Math.min(1, mx / Math.max(bmp.width, bmp.height));
+    const ow = bmp.width || bmp.naturalWidth, oh = bmp.height || bmp.naturalHeight, k = Math.min(1, 1080 / Math.max(ow, oh));
+    let sm = bmp;
     if (k < 1) {
-      let ok = null; try { ok = await createImageBitmap(bmp, { resizeWidth: Math.round(bmp.width * k), resizeHeight: Math.round(bmp.height * k), resizeQuality: 'high' }); } catch (e) { ok = null; }
-      if (!ok) { ok = document.createElement('canvas'); ok.width = Math.round(bmp.width * k); ok.height = Math.round(bmp.height * k); ok.getContext('2d').drawImage(bmp, 0, 0, ok.width, ok.height); }
-      if (bmp.close) bmp.close(); bmp = ok;
+      sm = null; try { sm = await createImageBitmap(bmp, { resizeWidth: Math.round(ow * k), resizeHeight: Math.round(oh * k), resizeQuality: 'high' }); } catch (e) { sm = null; }
+      if (!sm) { sm = document.createElement('canvas'); sm.width = Math.round(ow * k); sm.height = Math.round(oh * k); sm.getContext('2d').drawImage(bmp, 0, 0, sm.width, sm.height); }
+      if (bmp.close) bmp.close();
     }
-    s.img = bmp; s.w = bmp.width; s.h = bmp.height; s.dur = 0;
-    /* ⚡ 미리보기용 작은 사본 (휴대폰이 큰 사진을 그리다 멈칫하지 않게 · 완성 영상은 큰 사진으로) */
-    const pk = Math.min(1, 1280 / Math.max(s.w, s.h)); s.pv = s.img;
-    if (pk < 1) { try { s.pv = await createImageBitmap(s.img, { resizeWidth: Math.round(s.w * pk), resizeHeight: Math.round(s.h * pk), resizeQuality: 'medium' }); } catch (e) { try { const pc = document.createElement('canvas'); pc.width = Math.round(s.w * pk); pc.height = Math.round(s.h * pk); pc.getContext('2d').drawImage(s.img, 0, 0, pc.width, pc.height); s.pv = pc; } catch (e2) { s.pv = s.img; } } }
+    s.img = sm; s.pv = sm; s.full = null; s.big = k < 1; s.w = sm.width; s.h = sm.height; s.dur = 0;
   } else if (s.kind === 'video') {
     s.vid = vidEl(s.url); await waitMeta(s.vid);
     s.dur = s.vid.duration; s.w = s.vid.videoWidth || 1280; s.h = s.vid.videoHeight || 720;
@@ -159,6 +157,16 @@ async function loadSource(meta, blob) {
   SRC.set(s.id, s);
   return s;
 }
+async function ensureFull(s) {   // 완성 영상용 큰 사진 (2160) 잠깐 꺼내기
+  if (!s || s.kind !== 'image' || !s.big || s.full) return;
+  try {
+    const b = await createImageBitmap(s.file, { imageOrientation: 'from-image' }), k = Math.min(1, 2160 / Math.max(b.width, b.height));
+    if (k < 1) { let r = null; try { r = await createImageBitmap(b, { resizeWidth: Math.round(b.width * k), resizeHeight: Math.round(b.height * k), resizeQuality: 'high' }); } catch (e) { r = null; } if (r) { b.close(); s.full = r; return; } }
+    s.full = b;
+  } catch (e) { s.full = null; }
+}
+function dropFull(s) { if (s && s.full) { try { s.full.close && s.full.close(); } catch (e) { /* 무시 */ } s.full = null; } }
+ED.ensureFull = ensureFull; ED.dropFull = dropFull;
 async function decodeAudioBlob(blob) {
   try {
     const ab = await blob.arrayBuffer(); const ctx = new OAC(2, 44100, 44100);

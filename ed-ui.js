@@ -506,24 +506,24 @@ function pairGo() {
   if (!lyrOK()) return toast('먼저 가사 시간을 맞춰 주세요'); if (PLAY) pause();
   P.pair = P.pair && P.pair.by ? P.pair : { by: {}, j: 0 }; PAIR = P.pair; const S = fitParts().S;
   if (PAIR.j >= S.length || PAIR.by[S[PAIR.j] && S[PAIR.j].id] != null) { const f = S.findIndex(c => PAIR.by[c.id] == null); PAIR.j = f < 0 ? 0 : f; }
-  pairRe();
+  pairRe(); setTimeout(() => { const bx = $('panel').querySelector('.pairbox'), sb = document.querySelector('.stage').getBoundingClientRect().bottom; if (bx) window.scrollBy({ top: bx.getBoundingClientRect().top - sb - 6, behavior: 'smooth' }); }, 60);   // 고르는 칸이 바로 보이게
 }
 function pairNext(from) { const S = fitParts().S; for (let q = from + 1; q < S.length; q++) if (PAIR.by[S[q].id] == null) return q; for (let q = 0; q <= from && q < S.length; q++) if (PAIR.by[S[q].id] == null) return q; return S.length; }
 function pairPick(v) {
   if (!PAIR) return; const { S } = fitParts(), j = PAIR.j; if (j >= S.length) return;
   if (v !== 'intro' && v !== 'out') { v = +v; if (v < pairMin(j) || v > pairMax(j)) return toast('앞뒤 사진의 가사 줄 사이에서 골라 주세요'); }
   if (v === 'intro' && j > 0) return;
-  PAIR.by[S[j].id] = v; PAIR.j = pairNext(j);
+  PAIR.by[S[j].id] = v; PAIR.j = pairNext(j); PWIN = 0;
   if (PAIR.j >= S.length) toast('✅ 사진을 모두 골랐어요 · 아래 「✅ 적용」을 누르세요', 4000);
   commit(true); pairRe();
 }
+let PWIN = 0;   // 가사 후보 몇 줄 더 볼지
 function pairRe() {
-  const S = fitParts().S, c = PAIR && S[PAIR.j];
-  if (c && !PLAY) { const i = P.clips.indexOf(c); SEL = i; T = timeline(P).st[i] + Math.min(.6, clipLen(c) / 2); renderTL(); drawNow(); const it = $('tl').querySelector(`.tli[data-i="${i}"]`); if (it) it.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); }
+  const S = fitParts().S, c = PAIR && S[PAIR.j], ob = $('panel').querySelector('.pairbox'), y0 = ob ? ob.getBoundingClientRect().top : null;
+  if (c && !PLAY) { const i = P.clips.indexOf(c); SEL = i; T = timeline(P).st[i] + Math.min(.6, clipLen(c) / 2); renderTL(); drawNow(); const tl = $('tl'), it = tl.querySelector(`.tli[data-i="${i}"]`); if (it) tl.scrollLeft = it.offsetLeft - tl.clientWidth / 2 + it.offsetWidth / 2; }
   renderPanel();
-  const box = $('panel').querySelector('.pairl'), el = box && (box.querySelector('.lyl.sel') || box.querySelector('.lyl:not(:disabled)'));
-  if (box && el) box.scrollTop = Math.max(0, el.offsetTop - box.offsetTop - 50);
-  const strip = $('panel').querySelector('.pstrip .on'); if (strip) strip.scrollIntoView({ inline: 'center', block: 'nearest' });
+  const nb = $('panel').querySelector('.pairbox'); if (y0 != null && nb) window.scrollBy(0, nb.getBoundingClientRect().top - y0);   // 화면이 위로 튀지 않게
+  const st = $('panel').querySelector('.pstrip'), on = st && st.querySelector('.on'); if (st && on) st.scrollLeft = on.offsetLeft - st.clientWidth / 2 + on.offsetWidth / 2;
 }
 function pairApply() {
   const { t0, en, S } = fitParts(), n = S.length, Ls = lyrTimes(), { st, total } = timeline(P), gap = Ls.length > 1 ? (Ls[Ls.length - 1] - Ls[0]) / (Ls.length - 1) : 4;
@@ -547,22 +547,21 @@ function pairBox() {
   if (!PAIR) return `<div class="grp pairbox"><h3>📷 사진마다 시작 가사 줄 고르기 <small>사진을 보고 직접</small></h3>
     <p class="hint" style="margin-top:0">사진이 하나씩 나오면, 그 사진이 <b>시작할 가사 줄</b>을 직접 골라요. 사진 ${n}장을 <b>전부 직접</b> 고르고 ✅ 적용하면, 사진마다 길이(9초 · 3초…)가 저절로 맞춰져요. 고른 건 저장돼서 나중에 이어서 할 수 있어요.</p>
     <button type="button" data-a="pairgo" class="pri" style="width:100%">📷 ${saved ? `이어서 고르기 (${saved} / ${n}장 골라 둠)` : '고르기 시작'}</button></div>`;
-  const j = PAIR.j, c = S[j], lo = j < n ? pairMin(j) : 0, hi = j < n ? pairMax(j) : -1, sug = j < n ? pairSug(j) : null, at = {}, done = pairDone();
-  S.forEach(x => { const v = PAIR.by[x.id]; if (typeof v === 'number') at[v] = x; });
+  const j = PAIR.j, c = S[j], lo = j < n ? pairMin(j) : 0, hi = j < n ? pairMax(j) : -1, sug = j < n ? pairSug(j) : null, done = pairDone();
   const lab = v => v === 'intro' ? '전주' : v === 'out' ? '후주' : v != null ? `${v + 1}줄` : '?';
-  let h = `<div class="grp pairbox on"><h3>📷 사진마다 시작 가사 줄 고르기 <small>${done} / ${n}장</small></h3>
-    <div class="pstrip">${S.map((x, q) => `<button type="button" class="pst${q === j ? ' on' : ''}${PAIR.by[x.id] == null ? ' no' : ''}" data-a="pairto" data-v="${q}"><span data-gth="${x.src || ''}"></span><small>${q + 1}<br>${lab(PAIR.by[x.id])}</small></button>`).join('')}</div>`;
+  let h = `<div class="grp pairbox on"><div class="pbar"><b>📷 ${Math.min(j + 1, n)}번째 사진</b><span>${done} / ${n}장 고름</span></div>`;
   if (j < n) {
-    const sl = sug === 'intro' ? '🎵 전주부터' : sug === 'out' ? '⏭ 후주' : sug != null ? `${sug + 1}줄 「${esc(L[sug].text.slice(0, 9))}」` : '';
-    h += `<div class="pairhd"><span class="shth" data-gth="${c.src || ''}">${c.blank ? '<b class="lno">⬜</b>' : ''}</span><div><b>${j + 1}번째 사진</b> <small>/ ${n}장</small>${PAIR.by[c.id] != null ? ` <small class="pdone">지금: ${lab(PAIR.by[c.id])}</small>` : ''}<br><small>위 미리보기에 크게 보여요 · 이 사진이 <b>시작할 가사 줄</b>을 아래에서 톡</small></div></div>
-      <div class="btns3"><button type="button" data-a="pairto" data-v="${j - 1}"${j ? '' : ' disabled'}>◀ 앞 사진</button>${sug != null ? `<button type="button" data-a="pairline" data-v="${sug}" class="pri">✅ ${sl}</button>` : '<span></span>'}<button type="button" data-a="pairto" data-v="${j + 1}"${j + 1 < n ? '' : ' disabled'}>다음 사진 ▶</button></div>
-      ${j === 0 && sug !== 'intro' ? `<button type="button" data-a="pairline" data-v="intro" class="sec" style="width:100%;margin-top:6px">🎵 전주부터 (가사 나오기 전부터)</button>` : ''}`;
-  } else h += `<p style="margin:6px 0"><b>✅ ${done === n ? '사진을 모두 골랐어요.' : `아직 ${n - done}장 남았어요 (위 「?」 사진을 눌러요)`}</b></p>`;
-  h += `<div class="lyls pairl">${L.map((x, i) => { const off = j >= n || i < lo || i > hi, ph = at[i]; return `<button type="button" class="lyl${off ? ' past' : ''}${i === sug ? ' sel' : ''}" data-a="pairline" data-v="${i}"${off ? ' disabled' : ''}><b>${i + 1}. ${fmt(x.t)}</b><span>${esc(x.text)}</span>${ph ? `<i class="pth" data-gth="${ph.src || ''}"></i>` : ''}</button>`; }).join('')}</div>
-    ${j < n ? `<button type="button" data-a="pairline" data-v="out" class="sec" style="width:100%">⏭ 후주 (마지막 가사 뒤 · 엔딩 전)</button>` : ''}
-    <div class="btns2" style="margin-top:8px"><button type="button" data-a="pairapply" class="pri"${done === n ? '' : ' disabled'}>✅ 적용 (${done} / ${n})</button><button type="button" data-a="pairstop" class="sec" style="margin-top:0">닫기 (고른 건 저장)</button></div>
-    <button type="button" data-a="pairclr" class="dg" style="width:100%">🗑 고른 것 모두 지우고 처음부터</button>
-    <p class="hint" style="margin:4px 0 0">흐린 줄은 앞뒤 사진 때문에 못 골라요 · 잘못 고른 사진은 위 사진 줄에서 눌러 다시 골라요 · 🔒 잠겨 있어도 돼요</p></div>`;
+    const cur = PAIR.by[c.id], first = lo === Infinity ? Infinity : Math.max(lo, 0), cnt = 6 + PWIN, cand = []; for (let i = first; i <= hi && cand.length < cnt; i++) cand.push(i);
+    h += `<div class="pairhd"><span class="shth" data-gth="${c.src || ''}">${c.blank ? '<b class="lno">⬜</b>' : ''}</span><div><b>이 사진이 시작할 가사를 톡</b><br><small>위 미리보기에 이 사진이 크게 보여요${cur != null ? ` · 지금: <b>${lab(cur)}</b>` : ''}</small></div></div>
+      ${j === 0 ? `<button type="button" class="pcand intro${sug === 'intro' ? ' sel' : ''}" data-a="pairline" data-v="intro"><b>🎵</b><span>전주부터 (가사 나오기 전)</span></button>` : ''}
+      ${cand.map(i => `<button type="button" class="pcand${i === sug ? ' sel' : ''}${i === cur ? ' cur' : ''}" data-a="pairline" data-v="${i}"><b>${i + 1}</b><span>${esc(P.lyrics.lines[i].text)}</span><small>${fmt(P.lyrics.lines[i].t)}</small></button>`).join('') || '<p class="hint">고를 수 있는 가사 줄이 없어요 · 앞 사진을 다시 골라 주세요</p>'}
+      ${cand.length && cand[cand.length - 1] < hi ? `<button type="button" class="pmore" data-a="pairmore">▼ 가사 더 보기</button>` : ''}
+      <button type="button" class="pcand out" data-a="pairline" data-v="out"><b>⏭</b><span>후주 (마지막 가사 뒤 · 엔딩 전)</span></button>
+      <div class="btns2" style="margin-top:8px"><button type="button" data-a="pairto" data-v="${j - 1}"${j ? '' : ' disabled'}>◀ 앞 사진</button><button type="button" data-a="pairto" data-v="${j + 1}"${j + 1 <= n ? '' : ' disabled'}>건너뛰기 ▶</button></div>`;
+  } else h += `<p style="margin:6px 0"><b>${done === n ? '✅ 사진을 모두 골랐어요 · 아래 ✅ 적용을 누르세요' : `아직 ${n - done}장 남았어요 · 아래 목록에서 「?」 사진을 눌러요`}</b></p>`;
+  h += `<div class="btns2" style="margin-top:8px"><button type="button" data-a="pairapply" class="pri"${done === n ? '' : ' disabled'}>✅ 적용 (${done} / ${n})</button><button type="button" data-a="pairstop" class="sec" style="margin-top:0">닫기 (저장됨)</button></div>
+    <details class="plist"${j >= n ? ' open' : ''}><summary>🔢 고른 목록 · 다른 사진 다시 고르기</summary><div class="pstrip">${S.map((x, q) => `<button type="button" class="pst${q === j ? ' on' : ''}${PAIR.by[x.id] == null ? ' no' : ''}" data-a="pairto" data-v="${q}"><span data-gth="${x.src || ''}"></span><small>${q + 1}<br>${lab(PAIR.by[x.id])}</small></button>`).join('')}</div>
+    <button type="button" data-a="pairclr" class="dg" style="width:100%">🗑 고른 것 모두 지우고 처음부터</button></details></div>`;
   return h;
 }
 /* ═════════ 🎯 쉬운 순서 — 노래 → 가사 → 사진 짝짓기 → 영상 만들기 (한 화면에) ═════════ */
@@ -570,6 +569,7 @@ function pEasy(c) {
   const mf = musFile(), Ly = P.lyrics || {}, nL = (Ly.lines || []).length, { S, en } = fitParts(), { total } = timeline(P);
   const st = (ok, n, t, sub) => `<div class="estep${ok ? ' ok' : ''}"><b>${ok ? '✅' : n}</b><div><h3>${t}</h3>${sub ? `<small>${sub}</small>` : ''}</div></div>`;
   let h = `<div class="easyhd">🎯 <b>가사 영상 쉬운 순서</b><small>위에서부터 차례로 하세요 · 다른 기능은 위 「🛠 모든 기능」</small></div>`;
+  if (PAIR) return h + `<div class="estep ok"><b>✅</b><div><h3>노래 · 가사 준비됨</h3><small>${mf ? esc(mf.name || '내 노래') : ''} · 가사 ${nL}줄</small></div></div>` + st(false, '3', '📷 사진마다 시작 가사 고르기', '사진 하나 → 시작할 가사 톡 → 다음 사진') + pairBox();
   h += st(!!mf, '1', '🎵 노래 넣기', mf ? `${esc(mf.name || '내 노래')} · ${fmt(mf.dur)}` : '수노에서 받은 MP3를 골라요');
   h += `<div class="grp"><label class="btnf${mf ? '' : ' big'}">📁 ${mf ? '다른 노래로 바꾸기' : '내 노래(MP3) 고르기'}<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label></div>`;
   h += st(nL > 0 && !!Ly.timed, '2', '🎤 가사 넣고 시간 맞추기', nL ? `가사 ${nL}줄 · ${Ly.timed ? '시간 맞춤 ✔' : '아직 고르게만 나눔 → 아래 「👆 노래 들으며 톡톡 맞추기」'}` : '가사를 붙여넣고 「✅ 가사 넣기 (저장)」');
@@ -711,7 +711,7 @@ async function getMix(silent) {
   const k = audioKey(); if (k === mixKey && mixBuf) return mixBuf;
   if (mixing && mixing.k === k) { if (!silent) busy('🎵 소리 준비 중…'); try { return await mixing.p; } finally { if (!silent) busy(''); } }
   if (!silent) busy('🎵 소리 준비 중…');
-  const job = { k, p: ED.mixAudio(44100) }; mixing = job;
+  const job = { k, p: ED.mixAudio(44100).catch(() => ED.mixAudio(22050)) }; mixing = job;   // 메모리가 모자라면 가볍게 한 번 더
   try { const b = await job.p; if (mixing === job) { mixBuf = b; mixKey = k; } return b; } finally { if (mixing === job) mixing = null; if (!silent) busy(''); }
 }
 let premixT = 0;
@@ -733,7 +733,7 @@ async function play0() {
   if (ac.state === 'suspended') { try { await Promise.race([ac.resume(), sleep(400)]); } catch (e) { /* 무시 */ } }
   useAC = ac.state === 'running';
   if (ab && useAC) { asrc = ac.createBufferSource(); asrc.buffer = ab; asrc.connect(ac.destination); asrc.start(0, T); }
-  else if (ab) toast('🔇 소리가 안 나오면 ▶를 한 번 더 눌러 주세요');
+  else if (ab) toast('🔇 휴대폰이 소리를 막았어요 · ⏸ 누르고 ▶를 한 번 더 눌러 주세요', 4500);
   acT0 = clock(); T0 = T; LATV = useAC ? avLat(ac) : 0; PLAY = true; $('playBtn').textContent = '⏸'; SELOV = null; if (useAC && ab && clickOn()) schedClicks(ac); loop(); renderCut();
 }
 function pause() {
@@ -1648,7 +1648,8 @@ $('panel').addEventListener('click', async e => {
     case 'pairgo': return pairGo();
     case 'easyplay': if (PLAY) pause(); T = 0; return play();
     case 'pairline': return pairPick(v);
-    case 'pairto': if (PAIR) { const n = fitParts().S.length; PAIR.j = clamp(+v, 0, n); } return pairRe();
+    case 'pairto': if (PAIR) { const n = fitParts().S.length; PAIR.j = clamp(+v, 0, n); PWIN = 0; } return pairRe();
+    case 'pairmore': PWIN += 6; return pairRe();
     case 'pairclr': if (!confirm2('고른 가사 줄을 모두 지우고 1번째 사진부터 다시 고를까요?')) return; P.pair = { by: {}, j: 0 }; PAIR = P.pair; commit(true); return pairRe();
     case 'pairstop': PAIR = null; return renderPanel();
     case 'pairapply': if (PLAY) pause(); return pairApply();
