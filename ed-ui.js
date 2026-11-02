@@ -21,7 +21,7 @@ function commit(noHist) {
   updUndo(); renderTL(); drawNow(); clearTimeout(saveT); saveT = setTimeout(saveProj, 700); premix();
 }
 function setP(p) { P = ED.P = p; }
-function undo(d) { const n = hi + d; if (n < 0 || n >= hist.length) return; hi = n; const keep = P && P.lock && P.lock.on ? { clips: JSON.stringify(P.clips), lock: JSON.stringify(P.lock), rev: P.lock.rev || 0 } : null; setP(JSON.parse(hist[hi])); if (keep && P.lock && P.lock.on && (P.lock.rev || 0) !== keep.rev) { /* 🎬 가사 맞춤처럼 일부러 바꾼 것은 되돌릴 수 있게 */ } else if (keep) { P.clips = mergeTiming(JSON.parse(keep.clips)); P.lock = JSON.parse(keep.lock); P.lock.sig = sigOf(); P.lock.snap = JSON.stringify(P.clips); }   /* 🔒 잠근 동안 되돌리기는 장면 시간 · 순서를 건드리지 않아요 */ if (SEL >= P.clips.length) SEL = P.clips.length - 1; SELOV = null; T = Math.min(T, timeline(P).total); renderAll(); clearTimeout(saveT); saveT = setTimeout(saveProj, 700); toast(d < 0 ? '↩️ 되돌렸어요' : '↪️ 다시 했어요'); }
+function undo(d) { const n = hi + d; if (n < 0 || n >= hist.length) return; hi = n; PAIR = null; const keep = P && P.lock && P.lock.on ? { clips: JSON.stringify(P.clips), lock: JSON.stringify(P.lock), rev: P.lock.rev || 0 } : null; setP(JSON.parse(hist[hi])); if (keep && P.lock && P.lock.on && (P.lock.rev || 0) !== keep.rev) { /* 🎬 가사 맞춤처럼 일부러 바꾼 것은 되돌릴 수 있게 */ } else if (keep) { P.clips = mergeTiming(JSON.parse(keep.clips)); P.lock = JSON.parse(keep.lock); P.lock.sig = sigOf(); P.lock.snap = JSON.stringify(P.clips); }   /* 🔒 잠근 동안 되돌리기는 장면 시간 · 순서를 건드리지 않아요 */ if (SEL >= P.clips.length) SEL = P.clips.length - 1; SELOV = null; T = Math.min(T, timeline(P).total); renderAll(); clearTimeout(saveT); saveT = setTimeout(saveProj, 700); toast(d < 0 ? '↩️ 되돌렸어요' : '↪️ 다시 했어요'); }
 function updUndo() { $('undoBtn').disabled = hi <= 0; $('redoBtn').disabled = hi >= hist.length - 1; }
 async function saveProj() { if (!P) return; try { await IDB.put('p', 'cur', { P, at: Date.now() }); } catch (e) { toast('저장 공간이 부족해 「이어서 하기」 저장을 못 했어요'); } }
 
@@ -44,7 +44,7 @@ $('fStart').addEventListener('change', async e => {
   hist = []; hi = -1; SEL = -1; T = 1.2;
   showEditor();
   await addFiles(fs, 1);
-  commit(); setTab('scene');
+  commit(); setTab(TAB === 'easy' ? 'easy' : 'scene');
   toast(`🤖 「AI」 탭에서 자르기 · 자막을 한 번에 맡길 수 있어요`, 4500);
 });
 /* 📁 내 파일에서 고르기: 사진 고르기 화면 대신 「내 파일 · 다운로드」 목록으로 열림 → 사진 · 동영상만 골라서 위와 똑같이 */
@@ -487,64 +487,100 @@ function sceneFitBox() {
 }
 /* ═════════ 📷 사진마다 시작 가사 줄 톡톡 — 가사에 맞춰 만든 이미지를 그 가사 줄에 딱 ═════════
    사진 순서는 그대로 · 사진 하나를 고르면 「이 사진이 시작할 가사 줄」을 톡 → 다음 사진. 노래를 안 들어도 돼요. */
-let PAIR = null;   // { j: 지금 사진 번호, sel: [줄 번호 | 'intro' | 'out'] }
+let PAIR = null;   // = P.pair { by: { 장면id: 줄번호 | 'intro' | 'out' }, j: 지금 사진 } — 프로젝트에 저장돼서 다음에 이어서 해요
 const lyrTimes = () => P.lyrics.lines.map(l => l.t);
-function pairMin(j) { if (!PAIR || j === 0) return 0; for (let q = j - 1; q >= 0; q--) { const v = PAIR.sel[q]; if (v === 'out') return Infinity; if (v === 'intro') return 0; if (typeof v === 'number') return v + 1; } return 0; }
-function pairSug(j) {
-  const { S } = fitParts(), c = S[j]; if (!c) return null; const Ls = lyrTimes(), lo = pairMin(j); if (lo === Infinity) return 'out';
-  const st0 = timeline(P).st[P.clips.indexOf(c)]; if (j === 0 && st0 < Ls[0] - 1) return 'intro';
-  let best = null; for (let i = lo; i < Ls.length; i++) if (best == null || Math.abs(Ls[i] - st0) < Math.abs(Ls[best] - st0)) best = i;
-  return best == null ? 'out' : best;
+const pv = j => { const S = fitParts().S; return PAIR && S[j] ? PAIR.by[S[j].id] : undefined; };
+function pairMin(j) { for (let q = j - 1; q >= 0; q--) { const v = pv(q); if (v === 'out') return Infinity; if (v === 'intro') return 0; if (typeof v === 'number') return v + 1; } return 0; }
+function pairMax(j) { const n = fitParts().S.length, L = P.lyrics.lines.length; for (let q = j + 1; q < n; q++) { const v = pv(q); if (typeof v === 'number') return v - 1; if (v === 'intro') return -1; } return L - 1; }
+function pairSug(j) {   // 추천 줄: 앞뒤로 고른 줄 사이를 남은 사진에 고르게 나눈 자리
+  const { S, t0 } = fitParts(), n = S.length; if (j >= n) return null; const cur = pv(j); if (cur != null) return cur;
+  const Ls = lyrTimes(), lo = pairMin(j), hi = pairMax(j); if (lo === Infinity || lo > hi) return 'out';
+  if (j === 0) return Ls[0] > (t0 ? clipLen(t0) : 0) + 2 ? 'intro' : lo;
+  if (pv(j - 1) === 'intro') return lo;   // 전주 다음 사진은 첫 가사 줄부터
+  let q = j + 1; while (q < n && typeof pv(q) !== 'number') q++;
+  const p = lo - 1, end = q < n ? pv(q) : Ls.length, k = (end - p) / (q - j + 1);
+  return clamp(p + Math.max(1, Math.round(k)), lo, hi);
 }
-function pairGo() { if (!lyrOK()) return toast('먼저 가사 시간을 맞춰 주세요'); if (PLAY) pause(); PAIR = { j: 0, sel: [] }; pairRe(); }
-function pairPick(v) {
-  if (!PAIR) return; const { S } = fitParts(), j = PAIR.j; if (j >= S.length) return;
-  if (v !== 'intro' && v !== 'out') { v = +v; if (v < pairMin(j)) return toast('앞 사진보다 뒤에 있는 줄을 골라 주세요'); }
-  if (v === 'intro' && j > 0) return; PAIR.sel[j] = v; PAIR.j = j + 1;
-  const c = S[j]; SEL = P.clips.indexOf(c); renderTL();
-  if (PAIR.j >= S.length) toast('✅ 사진을 모두 짝지었어요 · 아래 「✅ 적용」을 누르세요', 4000);
+function pairDone() { const S = fitParts().S; return S.filter(c => PAIR.by[c.id] != null).length; }
+function pairGo() {
+  if (!lyrOK()) return toast('먼저 가사 시간을 맞춰 주세요'); if (PLAY) pause();
+  P.pair = P.pair && P.pair.by ? P.pair : { by: {}, j: 0 }; PAIR = P.pair; const S = fitParts().S;
+  if (PAIR.j >= S.length || PAIR.by[S[PAIR.j] && S[PAIR.j].id] != null) { const f = S.findIndex(c => PAIR.by[c.id] == null); PAIR.j = f < 0 ? 0 : f; }
   pairRe();
 }
+function pairNext(from) { const S = fitParts().S; for (let q = from + 1; q < S.length; q++) if (PAIR.by[S[q].id] == null) return q; for (let q = 0; q <= from && q < S.length; q++) if (PAIR.by[S[q].id] == null) return q; return S.length; }
+function pairPick(v) {
+  if (!PAIR) return; const { S } = fitParts(), j = PAIR.j; if (j >= S.length) return;
+  if (v !== 'intro' && v !== 'out') { v = +v; if (v < pairMin(j) || v > pairMax(j)) return toast('앞뒤 사진의 가사 줄 사이에서 골라 주세요'); }
+  if (v === 'intro' && j > 0) return;
+  PAIR.by[S[j].id] = v; PAIR.j = pairNext(j);
+  if (PAIR.j >= S.length) toast('✅ 사진을 모두 골랐어요 · 아래 「✅ 적용」을 누르세요', 4000);
+  commit(true); pairRe();
+}
 function pairRe() {
-  renderPanel(); const box = $('panel').querySelector('.pairl'), el = box && (box.querySelector('.lyl.sel') || box.querySelector('.lyl:not(.past)'));
-  if (box && el) box.scrollTop = Math.max(0, el.offsetTop - box.offsetTop - 40);
+  const S = fitParts().S, c = PAIR && S[PAIR.j];
+  if (c && !PLAY) { const i = P.clips.indexOf(c); SEL = i; T = timeline(P).st[i] + Math.min(.6, clipLen(c) / 2); renderTL(); drawNow(); const it = $('tl').querySelector(`.tli[data-i="${i}"]`); if (it) it.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }); }
+  renderPanel();
+  const box = $('panel').querySelector('.pairl'), el = box && (box.querySelector('.lyl.sel') || box.querySelector('.lyl:not(:disabled)'));
+  if (box && el) box.scrollTop = Math.max(0, el.offsetTop - box.offsetTop - 50);
+  const strip = $('panel').querySelector('.pstrip .on'); if (strip) strip.scrollIntoView({ inline: 'center', block: 'nearest' });
 }
 function pairApply() {
-  if (!PAIR || !PAIR.sel.length) return toast('먼저 사진을 가사 줄에 짝지어 주세요');
   const { t0, en, S } = fitParts(), n = S.length, Ls = lyrTimes(), { st, total } = timeline(P), gap = Ls.length > 1 ? (Ls[Ls.length - 1] - Ls[0]) / (Ls.length - 1) : 4;
-  const tLen = t0 ? clamp(clipLen(t0), 1, Math.max(1, Ls[0] - .5)) : 0, mf = musFile(), endLen = en ? clipLen(en) : 0;
-  const outAt = Ls[Ls.length - 1] + Math.min(8, Math.max(2, gap)), outs = []; PAIR.sel.forEach((v, j) => { if (v === 'out') outs.push(j); });
-  const lastSel = Math.max(0, ...PAIR.sel.map(v => typeof v === 'number' ? Ls[v] : 0));
+  const left = n - pairDone(); if (left) return toast(`아직 ${left}장을 안 골랐어요 · 사진 줄에서 「?」 사진을 눌러 골라 주세요`, 4500);
+  const tLen = t0 ? clamp(clipLen(t0), 1, Math.max(1, Ls[0] - .5)) : 0, mf = musFile(), endLen = en ? clipLen(en) : 0, V = S.map(c => PAIR.by[c.id]);
+  const outAt = Ls[Ls.length - 1] + Math.min(8, Math.max(2, gap)), outs = []; V.forEach((v, j) => { if (v === 'out') outs.push(j); });
+  const lastSel = Math.max(0, ...V.map(v => typeof v === 'number' ? Ls[v] : 0));
   const endAt = Math.max(en ? st[P.clips.indexOf(en)] : total, mf ? mf.dur - endLen : 0, outs.length ? outAt + 3 * outs.length : lastSel + 2);   // 엔딩 카드 시작 (노래 끝 쪽)
-  const starts = S.map((c, j) => { const v = PAIR.sel[j]; if (v === 'intro') return tLen; if (typeof v === 'number') return Ls[v]; if (v === 'out') { const k = outs.indexOf(j); return outAt + (endAt - outAt) * k / outs.length; } return st[P.clips.indexOf(c)]; });
-  if (PAIR.sel[0] !== 'intro' && t0 == null) starts[0] = 0;
+  const starts = V.map((v, j) => v === 'intro' ? tLen : typeof v === 'number' ? Ls[v] : outAt + (endAt - outAt) * outs.indexOf(j) / outs.length);
+  if (V[0] !== 'intro' && !t0) starts[0] = 0;
   for (let j = 1; j < n; j++) starts[j] = Math.max(starts[j], starts[j - 1] + .5);
   const E = Math.max(endAt, starts[n - 1] + .5), lens = new Array(P.clips.length).fill(null);
   if (t0) lens[0] = r2(Math.max(1, starts[0]));
   S.forEach((c, j) => { lens[P.clips.indexOf(c)] = r2((j + 1 < n ? starts[j + 1] : E) - starts[j]); });
-  const done = PAIR.sel.length; PAIR = null;
-  applyLens(lens, `📷 사진 ${done}장을 고른 가사 줄에 딱 맞췄어요${done < n ? ` · 나머지 ${n - done}장은 원래 시간대로` : ''} · ▶로 확인해 보세요`);
+  PAIR = null;
+  applyLens(lens, `📷 사진 ${n}장을 고른 가사 줄에 딱 맞췄어요 · ▶로 확인 · 고칠 사진은 「📷 이어서 고르기」로`);
 }
 function pairBox() {
   if (!lyrOK()) return '';
-  const { S } = fitParts(), n = S.length, L = P.lyrics.lines;
-  if (!PAIR) return `<div class="grp pairbox"><h3>📷 사진마다 시작 가사 줄 톡톡 <small>가사에 맞춰 만든 이미지일 때</small></h3>
-    <p class="hint" style="margin-top:0">사진 순서는 그대로 두고, 사진마다 <b>「이 사진이 시작할 가사 줄」</b>을 톡톡 골라요. 노래를 안 들어도 되고, 9초 · 3초처럼 사진마다 길이가 저절로 맞춰져요. (사진 ${n}장 · 가사 ${L.length}줄)</p>
-    <button type="button" data-a="pairgo" class="pri" style="width:100%">📷 짝짓기 시작</button></div>`;
-  const j = PAIR.j, c = S[j], lo = pairMin(j), sug = j < n ? pairSug(j) : null, at = {};
-  PAIR.sel.forEach((v, q) => { if (typeof v === 'number') at[v] = S[q]; });
-  let h = `<div class="grp pairbox on"><h3>📷 사진마다 시작 가사 줄 톡톡 <small>${Math.min(j, n)} / ${n}장 짝지음</small></h3>`;
+  const { S } = fitParts(), n = S.length, L = P.lyrics.lines, saved = P.pair && P.pair.by ? fitParts().S.filter(c => P.pair.by[c.id] != null).length : 0;
+  if (!PAIR) return `<div class="grp pairbox"><h3>📷 사진마다 시작 가사 줄 고르기 <small>사진을 보고 직접</small></h3>
+    <p class="hint" style="margin-top:0">사진이 하나씩 나오면, 그 사진이 <b>시작할 가사 줄</b>을 직접 골라요. 사진 ${n}장을 <b>전부 직접</b> 고르고 ✅ 적용하면, 사진마다 길이(9초 · 3초…)가 저절로 맞춰져요. 고른 건 저장돼서 나중에 이어서 할 수 있어요.</p>
+    <button type="button" data-a="pairgo" class="pri" style="width:100%">📷 ${saved ? `이어서 고르기 (${saved} / ${n}장 골라 둠)` : '고르기 시작'}</button></div>`;
+  const j = PAIR.j, c = S[j], lo = j < n ? pairMin(j) : 0, hi = j < n ? pairMax(j) : -1, sug = j < n ? pairSug(j) : null, at = {}, done = pairDone();
+  S.forEach(x => { const v = PAIR.by[x.id]; if (typeof v === 'number') at[v] = x; });
+  const lab = v => v === 'intro' ? '전주' : v === 'out' ? '후주' : v != null ? `${v + 1}줄` : '?';
+  let h = `<div class="grp pairbox on"><h3>📷 사진마다 시작 가사 줄 고르기 <small>${done} / ${n}장</small></h3>
+    <div class="pstrip">${S.map((x, q) => `<button type="button" class="pst${q === j ? ' on' : ''}${PAIR.by[x.id] == null ? ' no' : ''}" data-a="pairto" data-v="${q}"><span data-gth="${x.src || ''}"></span><small>${q + 1}<br>${lab(PAIR.by[x.id])}</small></button>`).join('')}</div>`;
   if (j < n) {
-    const sl = sug === 'intro' ? '🎵 전주부터' : sug === 'out' ? '⏭ 후주' : sug != null ? `${sug + 1}번 줄 「${esc(L[sug].text.slice(0, 10))}」` : '';
-    h += `<div class="pairhd"><span class="shth" data-gth="${c.src || ''}">${c.blank ? '<b class="lno">⬜</b>' : ''}</span><div><b>${j + 1}번째 사진</b> <small>(아래 줄의 ${P.clips.indexOf(c) + 1}번 장면)</small><br><small>이 사진이 <b>시작할 가사 줄</b>을 아래에서 톡</small></div></div>
-      <div class="btns2"><button type="button" data-a="pairback"${j ? '' : ' disabled'}>↶ 한 장 전</button>${sug != null ? `<button type="button" data-a="pairline" data-v="${sug}" class="pri">✅ ${sl}</button>` : ''}</div>
-      ${j === 0 && sug !== 'intro' ? `<button type="button" data-a="pairline" data-v="intro" class="sec" style="width:100%;margin-top:6px">🎵 전주부터 (가사 나오기 전부터 · 오프닝 다음)</button>` : ''}`;
-  } else h += `<p style="margin:0 0 6px"><b>✅ 사진을 모두 짝지었어요.</b> 아래 「✅ 적용」을 누르세요.</p>`;
-  h += `<div class="lyls pairl">${L.map((x, i) => { const past = j < n && i < lo, ph = at[i]; return `<button type="button" class="lyl${past ? ' past' : ''}${i === sug ? ' sel' : ''}" data-a="pairline" data-v="${i}"${past || j >= n ? ' disabled' : ''}><b>${fmt(x.t)}</b><span>${esc(x.text)}</span>${ph ? `<i class="pth" data-gth="${ph.src || ''}"></i>` : ''}</button>`; }).join('')}</div>
+    const sl = sug === 'intro' ? '🎵 전주부터' : sug === 'out' ? '⏭ 후주' : sug != null ? `${sug + 1}줄 「${esc(L[sug].text.slice(0, 9))}」` : '';
+    h += `<div class="pairhd"><span class="shth" data-gth="${c.src || ''}">${c.blank ? '<b class="lno">⬜</b>' : ''}</span><div><b>${j + 1}번째 사진</b> <small>/ ${n}장</small>${PAIR.by[c.id] != null ? ` <small class="pdone">지금: ${lab(PAIR.by[c.id])}</small>` : ''}<br><small>위 미리보기에 크게 보여요 · 이 사진이 <b>시작할 가사 줄</b>을 아래에서 톡</small></div></div>
+      <div class="btns3"><button type="button" data-a="pairto" data-v="${j - 1}"${j ? '' : ' disabled'}>◀ 앞 사진</button>${sug != null ? `<button type="button" data-a="pairline" data-v="${sug}" class="pri">✅ ${sl}</button>` : '<span></span>'}<button type="button" data-a="pairto" data-v="${j + 1}"${j + 1 < n ? '' : ' disabled'}>다음 사진 ▶</button></div>
+      ${j === 0 && sug !== 'intro' ? `<button type="button" data-a="pairline" data-v="intro" class="sec" style="width:100%;margin-top:6px">🎵 전주부터 (가사 나오기 전부터)</button>` : ''}`;
+  } else h += `<p style="margin:6px 0"><b>✅ ${done === n ? '사진을 모두 골랐어요.' : `아직 ${n - done}장 남았어요 (위 「?」 사진을 눌러요)`}</b></p>`;
+  h += `<div class="lyls pairl">${L.map((x, i) => { const off = j >= n || i < lo || i > hi, ph = at[i]; return `<button type="button" class="lyl${off ? ' past' : ''}${i === sug ? ' sel' : ''}" data-a="pairline" data-v="${i}"${off ? ' disabled' : ''}><b>${i + 1}. ${fmt(x.t)}</b><span>${esc(x.text)}</span>${ph ? `<i class="pth" data-gth="${ph.src || ''}"></i>` : ''}</button>`; }).join('')}</div>
     ${j < n ? `<button type="button" data-a="pairline" data-v="out" class="sec" style="width:100%">⏭ 후주 (마지막 가사 뒤 · 엔딩 전)</button>` : ''}
-    <div class="btns2" style="margin-top:8px"><button type="button" data-a="pairapply" class="pri">✅ 적용${j < n ? ` (${j}장까지)` : ''}</button><button type="button" data-a="pairstop" class="dg" style="margin-top:0">그만두기</button></div>
-    <p class="hint" style="margin:4px 0 0">🔒 잠겨 있어도 돼요 · 적용한 뒤 마음에 안 들면 ↩️ 되돌리기</p></div>`;
+    <div class="btns2" style="margin-top:8px"><button type="button" data-a="pairapply" class="pri"${done === n ? '' : ' disabled'}>✅ 적용 (${done} / ${n})</button><button type="button" data-a="pairstop" class="sec" style="margin-top:0">닫기 (고른 건 저장)</button></div>
+    <button type="button" data-a="pairclr" class="dg" style="width:100%">🗑 고른 것 모두 지우고 처음부터</button>
+    <p class="hint" style="margin:4px 0 0">흐린 줄은 앞뒤 사진 때문에 못 골라요 · 잘못 고른 사진은 위 사진 줄에서 눌러 다시 골라요 · 🔒 잠겨 있어도 돼요</p></div>`;
   return h;
+}
+/* ═════════ 🎯 쉬운 순서 — 노래 → 가사 → 사진 짝짓기 → 영상 만들기 (한 화면에) ═════════ */
+function pEasy(c) {
+  const mf = musFile(), Ly = P.lyrics || {}, nL = (Ly.lines || []).length, { S, en } = fitParts(), { total } = timeline(P);
+  const st = (ok, n, t, sub) => `<div class="estep${ok ? ' ok' : ''}"><b>${ok ? '✅' : n}</b><div><h3>${t}</h3>${sub ? `<small>${sub}</small>` : ''}</div></div>`;
+  let h = `<div class="easyhd">🎯 <b>가사 영상 쉬운 순서</b><small>위에서부터 차례로 하세요 · 다른 기능은 위 「🛠 모든 기능」</small></div>`;
+  h += st(!!mf, '1', '🎵 노래 넣기', mf ? `${esc(mf.name || '내 노래')} · ${fmt(mf.dur)}` : '수노에서 받은 MP3를 골라요');
+  h += `<div class="grp"><label class="btnf${mf ? '' : ' big'}">📁 ${mf ? '다른 노래로 바꾸기' : '내 노래(MP3) 고르기'}<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label></div>`;
+  h += st(nL > 0 && !!Ly.timed, '2', '🎤 가사 넣고 시간 맞추기', nL ? `가사 ${nL}줄 · ${Ly.timed ? '시간 맞춤 ✔' : '아직 고르게만 나눔 → 아래 「👆 노래 들으며 톡톡 맞추기」'}` : '가사를 붙여넣고 「✅ 가사 넣기 (저장)」');
+  h += mf ? lyrBox() : '<p class="hint" style="margin:0 0 12px">① 노래를 먼저 넣어 주세요.</p>';
+  h += st(false, '3', '📷 사진마다 시작 가사 줄 톡톡', `사진 ${S.length}장 · 순서는 아래 사진 줄 그대로`);
+  h += lyrOK() ? pairBox() : '<p class="hint" style="margin:0 0 12px">② 가사를 넣으면 여기가 열려요.</p>';
+  h += st(false, '4', '▶ 처음부터 확인 · 엔딩', `지금 영상 ${fmt(total)}${mf ? ` · 노래 ${fmt(mf.dur)}` : ''}`);
+  h += `<div class="grp"><button type="button" data-a="easyplay" class="pri" style="width:100%">▶ 처음부터 보기</button></div>`;
+  if (en) h += creditBox(en);
+  h += st(false, '5', '💾 영상 만들기', '');
+  return h + pSave(c);
 }
 function clipMenu(i) {
   const c = P.clips[i]; if (!c) return; SEL = i; renderTL();
@@ -898,28 +934,32 @@ $('cv').addEventListener('pointerup', () => { if (drag) { if (drag.moved) commit
 /* ═════════ 도구 탭 ═════════ */
 /* ═════════ 큰 단계 4개: ① 🎬 영상 · ② 🎵 음악 · ③ 💬 자막 · ④ 💾 저장 → 아래 탭은 그 단계 것만 ═════════ */
 const MODES = {
+  easy: ['⭐', '🎯', '쉬운 순서', [['easy', '🎯', '가사 영상']]],
   vid: ['①', '🎬', '영상', [['scene', '✂️', '장면'], ['order', '🧩', '순서'], ['blank', '⬜', '빈칸'], ['trans', '🔀', '전환'], ['deco', '✨', '꾸미기']]],
   song: ['②', '🎵', '음악', [['mus', '🎵', '음악'], ['sync', '⏱', '장면 맞추기'], ['vo', '🎙', '내 목소리']]],
   cap: ['③', '💬', '자막', [['lyr', '🎤', '노래 가사'], ['text', '💬', '장면 글씨']]],
   fin: ['④', '💾', '저장', [['info', '🏷', '카드·정보'], ['ai', '🤖', 'AI'], ['save', '💾', '영상 만들기']]]
 };
 const TAB_OLD = { edit: 'scene', cap: 'text', stk: 'deco', snd: 'mus', fx: 'deco' };
-let MODE = 'vid'; const MLAST = { vid: 'scene', cap: 'lyr', song: 'mus', fin: 'info' };
+let MODE = 'vid'; const MLAST = { easy: 'easy', vid: 'scene', cap: 'lyr', song: 'mus', fin: 'info' };
 function modeOf(t) { for (const [m, v] of Object.entries(MODES)) if (v[3].some(x => x[0] === t)) return m; return ''; }
 function setTab(t) {
   t = TAB_OLD[t] || t; const m = modeOf(t); if (!m) return;
   if (TAB === 'lyr' && t !== 'lyr') lyrRemind();
   if (m !== 'song' && TAPC) tapStop();
-  MODE = m; TAB = t; MLAST[m] = t; try { localStorage.setItem('bkEdTab', t); } catch (e) { /* 무시 */ }
+  MODE = m; TAB = t; MLAST[m] = t; try { localStorage.setItem('bkEdTab', t); localStorage.setItem('bkEdEasy', t === 'easy' ? '1' : '0'); } catch (e) { /* 무시 */ }
   renderTabs(); renderPanel();
 }
 try { const t0 = localStorage.getItem('bkEdTab'); const t1 = TAB_OLD[t0] || t0; if (t1 && modeOf(t1)) { TAB = t1; MODE = modeOf(t1); MLAST[MODE] = t1; } } catch (e) { /* 무시 */ }
 /* BK쇼츠 첫 화면 ✂️ 편집 탭에서 edit.html?m=vid|cap|song 으로 오면 그 단계로 바로 */
 const QS = new URLSearchParams(location.search), QM = QS.get('m'), QNEW = QS.has('new');
 if (QM && MODES[QM]) { MODE = QM; TAB = MLAST[QM]; }
+else { let ez = '1'; try { ez = localStorage.getItem('bkEdEasy') || '1'; } catch (e) { /* 무시 */ } if (ez === '1') { MODE = 'easy'; TAB = 'easy'; } }   // 🎯 쉬운 순서가 기본
 function renderTabs() {
-  $('modes').innerHTML = Object.entries(MODES).map(([k, v]) => `<button type="button" data-m="${k}"${pressed(MODE, k)}><b>${v[0]}</b>${v[1]} ${v[2]}</button>`).join('');
-  $('tabs').innerHTML = MODES[MODE][3].map(([k, i, n]) => `<button type="button" data-tab="${k}"${pressed(TAB, k)}><span>${i}</span>${n}</button>`).join('');
+  const ez = MODE === 'easy'; $('modes').classList.toggle('ez', ez); $('tabs').hidden = ez; document.body.classList.toggle('easy', ez);
+  $('modes').innerHTML = ez ? `<button type="button" data-m="easy" aria-pressed="true">🎯 가사 영상 만들기 <small>쉬운 순서</small></button><button type="button" data-m="vid" class="mfull">🛠 모든 기능</button>`
+    : Object.entries(MODES).filter(([k]) => k !== 'easy').map(([k, v]) => `<button type="button" data-m="${k}"${pressed(MODE, k)}><b>${v[0]}</b>${v[1]} ${v[2]}</button>`).join('') + `<button type="button" data-m="easy" class="mez">🎯 쉬운</button>`;
+  $('tabs').innerHTML = ez ? '' : MODES[MODE][3].map(([k, i, n]) => `<button type="button" data-tab="${k}"${pressed(TAB, k)}><span>${i}</span>${n}</button>`).join('');
   $('cutbar').hidden = !(MODE === 'song' || LYT >= 0); document.body.dataset.mode = MODE;
 }
 $('modes').addEventListener('click', e => { const b = e.target.closest('[data-m]'); if (!b) return; setTab(MLAST[b.dataset.m]); window.scrollTo({ top: 0, behavior: 'smooth' }); });
@@ -935,7 +975,7 @@ const range = (key, val, min, max, step, lbl) => `<label class="rg"><span>${lbl}
 
 function renderPanel() {
   if (!P) return;
-  const c = cur(), f = { scene: pEdit, order: pOrder, blank: pBlank, trans: pTrans, deco: pKku, lyr: pLyr, text: pText, mus: pMus, sync: pSync, vo: pVo, ai: pAI, info: pInfo, save: pSave }[TAB] || pEdit;
+  const c = cur(), f = { easy: pEasy, scene: pEdit, order: pOrder, blank: pBlank, trans: pTrans, deco: pKku, lyr: pLyr, text: pText, mus: pMus, sync: pSync, vo: pVo, ai: pAI, info: pInfo, save: pSave }[TAB] || pEdit;
   $('panel').innerHTML = f(c); fillThumbs($('panel'));
   const ta = $('panel').querySelector('textarea[data-auto]'); if (ta) autoGrow(ta);
 }
@@ -1606,15 +1646,17 @@ $('panel').addEventListener('click', async e => {
     case 'lenn': return lenNudge(+v);
     case 'scn': SCN = v; return renderPanel();
     case 'pairgo': return pairGo();
+    case 'easyplay': if (PLAY) pause(); T = 0; return play();
     case 'pairline': return pairPick(v);
-    case 'pairback': if (PAIR && PAIR.j > 0) { PAIR.j--; PAIR.sel.length = PAIR.j; } return pairRe();
+    case 'pairto': if (PAIR) { const n = fitParts().S.length; PAIR.j = clamp(+v, 0, n); } return pairRe();
+    case 'pairclr': if (!confirm2('고른 가사 줄을 모두 지우고 1번째 사진부터 다시 고를까요?')) return; P.pair = { by: {}, j: 0 }; PAIR = P.pair; commit(true); return pairRe();
     case 'pairstop': PAIR = null; return renderPanel();
     case 'pairapply': if (PLAY) pause(); return pairApply();
     case 'scfit': if (!confirm2('🎬 사진이 바뀌는 순간을 가사 줄 시작에 맞출까요?\n(사진 순서는 그대로 · 장면 시간만 바뀌어요 · ↩️ 되돌리기 가능)')) return; if (PLAY) pause(); return sceneFit();
     case 'scsnap': if (PLAY) pause(); return sceneSnap();
     case 'avlat': lsSet('bkEdLat', v); renderPanel(); return toast(v === 'auto' ? '🔊 휴대폰이 알려 주는 만큼 자동으로 맞춰요' : `🔊 그림을 ${v}초 늦춰서 보여 줘요 · ▶로 확인해 보세요`);
     case 'avclick': lsSet('bkEdClick', v === '1' ? '1' : ''); renderPanel(); return toast(v === '1' ? '🔔 ▶ 들으면 장면이 바뀔 때 딸깍 해요' : '딸깍 소리를 껐어요');
-    case 'endfit': { const mf = musFile(); if (!c || !mf) return; const i = SEL, st0 = timeline(P).st[i], L = Math.round((mf.dur - st0) * 100) / 100; if (L < 1) return toast('엔딩이 이미 노래 끝까지 와 있어요'); c.dur = L; commit(); renderPanel(); return toast(`🎵 엔딩을 ${L.toFixed(1)}초로 — 노래 끝까지 나와요`); }
+    case 'endfit': { const mf = musFile(), ec = P.clips.length && isEndC(P.clips[P.clips.length - 1]) ? P.clips[P.clips.length - 1] : c; if (!ec || !mf) return; const i = P.clips.indexOf(ec), st0 = timeline(P).st[i], L = Math.round((mf.dur - st0) * 100) / 100; if (L < 1) return toast('엔딩이 이미 노래 끝까지 와 있어요'); ec.dur = L; commit(); renderPanel(); return toast(`🎵 엔딩을 ${L.toFixed(1)}초로 — 노래 끝까지 나와요`); }
     case 'credon': P.credit = Object.assign({ text: 'BK AGENT · 비케이', pos: 'mid', logo: logoSel() }, P.credit || {}, { on: v === '1' ? 1 : 0 }); if (c && c.kind === 'card') T = timeline(P).st[SEL] + Math.min(clipLen(c) - .3, 2.5); return re();
     case 'credpos': if (P.credit) P.credit.pos = v; return re();
     case 'logosel': P.logoSel = v; if (P.credit) P.credit.logo = v; return re();
