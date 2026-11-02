@@ -60,6 +60,7 @@ async function checkResume() {
   $('resume').hidden = false;
   $('resumeInfo').innerHTML = `${pp.ic} <b>${esc(pp.n)}</b> · 장면 ${d.P.clips.length}개 · ${dt.getMonth() + 1}/${dt.getDate()} ${dt.getHours()}:${String(dt.getMinutes()).padStart(2, '0')}`;
   $('resumeBtn').onclick = () => resume(d.P);
+  if (QM && !QNEW) resume(d.P);   // 첫 화면 ✂️ 편집 탭에서 왔으면 하던 편집을 바로 열기
   $('resumeDel').onclick = async () => { if (!confirm2('이전 작업을 지울까요?')) return; await IDB.clear('f'); await IDB.clear('p'); $('resume').hidden = true; toast('지웠어요'); };
 }
 function confirm2(m) { return window.confirm(m); }
@@ -285,6 +286,7 @@ function clipMenu(i) {
     ${c.pin ? '' : `<button type="button" data-s="where" data-v="move">↔ 이 장면 옮기기 — 몇 번과 몇 번 사이로</button>`}
     <button type="button" data-s="swap">${c.blank ? '🖼 이 빈칸에 사진 넣기' : '🔄 다른 사진으로 바꾸기 <small>시간 · 글씨 · 효과는 그대로</small>'}</button>
     ${c.blank ? '' : `<button type="button" data-s="totray">🗂 서랍에 넣기</button>`}
+    ${c.pin ? '' : `<button type="button" data-s="blankpre">⬜ 이 장면 앞에 빈칸 넣기 <small>${P.blankDur || 4}초 · 뒤 장면은 그만큼 밀려요</small></button>`}
     <button type="button" data-s="del" class="dg">🗑 이 장면 지우기</button><button type="button" data-s="close" class="cl">닫기</button>`);
 }
 function whereSheet(ctx) {   // ctx: { mode:'copy'|'move'|'src', i, id, src }
@@ -308,6 +310,8 @@ function sheetClick(e) {
   const i = X.id ? P.clips.findIndex(c => c.id === X.id) : -1, c = P.clips[i];
   if (k === 'copy') { if (!c) return sheetClose(); CLIPB = { j: JSON.stringify(c), code: srcCode(c.src), src: c.src }; sheetClose(); renderPaste(); return toast(`📄 ${CLIPB.code}을 복사했어요 · 빨간 커서를 넣을 곳에 두고 「📋 붙여넣기」`, 4500); }
   if (k === 'swap') { if (!c) return sheetClose(); return swapSheet(c.id); }
+  if (k === 'blankpre') { if (!c) return sheetClose(); sheetClose(); const bd = P.blankDur || 4, [lo, hi] = movRange(), p = clamp(i, lo, hi + 1), nb = ED.newClip('image', null, { dur: bd, blank: 1, trans: 'cut', kb: 'none' });
+    P.clips.splice(p, 0, nb); SEL = p; T = timeline(P).st[p] + .02; commit(); renderPanel(); drawNow(); return toast(`⬜ ${p + 1}번 자리에 ${bd}초 빈칸을 넣었어요 · 뒤 장면은 ${bd}초 밀렸어요`, 4000); }
   if (k === 'swapto') { if (!c) return sheetClose(); sheetClose(); return swapDone(c, v); }
   if (k === 'totray') { if (!c || !c.src) return sheetClose(); sheetClose(); const id = c.src;
     if (trayHidden(id)) { P.trayHide = P.trayHide.filter(x => x !== id); commit(); toast(`🗂 ${srcCode(id)}을 서랍에 넣었어요`); } else toast(`🗂 ${srcCode(id)}은 이미 서랍에 있어요 · 영상에 ${useCount(id)}번 씀`, 3500);
@@ -582,7 +586,7 @@ $('cv').addEventListener('pointerdown', e => {
   const o = h.type === 'cap' ? A.c.cap : h.type === 'stk' ? A.c.stk[h.k] : A.c.blur[h.k];
   drag = { o, type: h.type, sx: px, sy: py, ox: h.type === 'cap' ? ED.capInfo(A.c).x : o.x, oy: h.type === 'cap' ? ED.capInfo(A.c).y : o.y, W, H, moved: false };
   $('cv').setPointerCapture(e.pointerId); e.preventDefault();
-  if (TAB !== 'deco') { MODE = 'vid'; TAB = MLAST.vid = 'deco'; renderTabs(); }
+  { const want = h.type === 'cap' ? 'text' : 'deco'; if (TAB !== want) { MODE = modeOf(want); TAB = MLAST[MODE] = want; renderTabs(); } }
   renderPanel(); drawNow();
 });
 $('cv').addEventListener('pointermove', e => {
@@ -594,14 +598,15 @@ $('cv').addEventListener('pointermove', e => {
 $('cv').addEventListener('pointerup', () => { if (drag) { if (drag.moved) commit(); drag = null; } });
 
 /* ═════════ 도구 탭 ═════════ */
-/* ═════════ 큰 단계 3개: ① 🎬 영상 만들기 · ② 🎤 노래 맞추기 · ③ 💾 마무리 → 아래 탭은 그 단계 것만 ═════════ */
+/* ═════════ 큰 단계 4개: ① 🎬 영상 · ② 💬 자막 · ③ 🎵 음악 · ④ 💾 저장 → 아래 탭은 그 단계 것만 ═════════ */
 const MODES = {
-  vid: ['①', '🎬', '영상 만들기', [['scene', '✂️', '장면'], ['order', '🧩', '순서'], ['deco', '😀', '글씨·스티커'], ['fx', '✨', '효과']]],
-  song: ['②', '🎤', '노래 맞추기', [['mus', '🎵', '음악'], ['lyr', '🎤', '가사'], ['sync', '⏱', '장면 맞추기'], ['vo', '🎙', '내 목소리']]],
-  fin: ['③', '💾', '마무리', [['info', '🏷', '카드·정보'], ['ai', '🤖', 'AI'], ['save', '💾', '저장']]]
+  vid: ['①', '🎬', '영상', [['scene', '✂️', '장면'], ['order', '🧩', '순서'], ['blank', '⬜', '빈칸'], ['deco', '✨', '꾸미기']]],
+  cap: ['②', '💬', '자막', [['lyr', '🎤', '노래 가사'], ['text', '💬', '장면 글씨']]],
+  song: ['③', '🎵', '음악', [['mus', '🎵', '음악'], ['sync', '⏱', '장면 맞추기'], ['vo', '🎙', '내 목소리']]],
+  fin: ['④', '💾', '저장', [['info', '🏷', '카드·정보'], ['ai', '🤖', 'AI'], ['save', '💾', '영상 만들기']]]
 };
-const TAB_OLD = { edit: 'scene', cap: 'deco', stk: 'deco', snd: 'mus' };
-let MODE = 'vid'; const MLAST = { vid: 'scene', song: 'mus', fin: 'info' };
+const TAB_OLD = { edit: 'scene', cap: 'text', stk: 'deco', snd: 'mus', fx: 'deco' };
+let MODE = 'vid'; const MLAST = { vid: 'scene', cap: 'lyr', song: 'mus', fin: 'info' };
 function modeOf(t) { for (const [m, v] of Object.entries(MODES)) if (v[3].some(x => x[0] === t)) return m; return ''; }
 function setTab(t) {
   t = TAB_OLD[t] || t; const m = modeOf(t); if (!m) return;
@@ -611,6 +616,9 @@ function setTab(t) {
   renderTabs(); renderPanel();
 }
 try { const t0 = localStorage.getItem('bkEdTab'); const t1 = TAB_OLD[t0] || t0; if (t1 && modeOf(t1)) { TAB = t1; MODE = modeOf(t1); MLAST[MODE] = t1; } } catch (e) { /* 무시 */ }
+/* BK쇼츠 첫 화면 ✂️ 편집 탭에서 edit.html?m=vid|cap|song 으로 오면 그 단계로 바로 */
+const QS = new URLSearchParams(location.search), QM = QS.get('m'), QNEW = QS.has('new');
+if (QM && MODES[QM]) { MODE = QM; TAB = MLAST[QM]; }
 function renderTabs() {
   $('modes').innerHTML = Object.entries(MODES).map(([k, v]) => `<button type="button" data-m="${k}"${pressed(MODE, k)}><b>${v[0]}</b>${v[1]} ${v[2]}</button>`).join('');
   $('tabs').innerHTML = MODES[MODE][3].map(([k, i, n]) => `<button type="button" data-tab="${k}"${pressed(TAB, k)}><span>${i}</span>${n}</button>`).join('');
@@ -629,7 +637,7 @@ const range = (key, val, min, max, step, lbl) => `<label class="rg"><span>${lbl}
 
 function renderPanel() {
   if (!P) return;
-  const c = cur(), f = { scene: pEdit, order: pOrder, deco: pDeco, fx: pFx, mus: pMus, lyr: pLyr, sync: pSync, vo: pVo, ai: pAI, info: pInfo, save: pSave }[TAB] || pEdit;
+  const c = cur(), f = { scene: pEdit, order: pOrder, blank: pBlank, deco: pKku, lyr: pLyr, text: pText, mus: pMus, sync: pSync, vo: pVo, ai: pAI, info: pInfo, save: pSave }[TAB] || pEdit;
   $('panel').innerHTML = f(c); fillThumbs($('panel'));
   const ta = $('panel').querySelector('textarea[data-auto]'); if (ta) autoGrow(ta);
 }
@@ -781,7 +789,7 @@ function blankBox() {
     <h4>빈 장면 길이 <small>넣은 다음 0.1초 단위로 고칠 수 있어요</small></h4>${chips('blankdur', [['1', '1초'], ['2', '2초'], ['3', '3초'], ['4', '4초'], ['5', '5초'], ['8', '8초']], bd)}
     <button type="button" data-a="blankins" class="pri" style="width:100%;padding:14px 8px;font-size:1.05rem">⬜ 지금 위치(<span id="blkT">${fmtS(T)}</span>)에 빈 장면 넣기</button>`;
   if (B.length) { const R = blankRuns(); h += `<p style="margin:10px 0 4px">빈 장면 <b>${B.length}개</b> 남았어요</p><div class="btns2"><button type="button" data-a="blanknext" class="sec">➡ 다음 빈칸으로 가기</button><button type="button" data-a="blankdelall" class="dg" style="margin-top:0">🗑 빈칸 전부 지우기</button></div>${R.length ? `<button type="button" data-a="bmergeall" class="sec" style="width:100%;margin-top:8px">🔗 붙어 있는 빈칸 전부 합치기 (${R.map(([lo, hi]) => `${hi - lo + 1}개 → ${runLen(lo, hi).toFixed(1)}초`).join(' · ')})</button>` : ''}`; }
-  h += `<p class="hint" style="margin:8px 0 0">💡 빈칸 길이를 노래에 딱 맞추려면: 미리보기 아래 「뒤 장면」을 <b>B 같이</b>로 → ▶ 들으며 빈칸이 끝나야 할 곳에서 ⏸ → <b>✂️ 여기서 끝</b> (뒤 사진이 함께 따라와요)</p>`;
+  h += `<p class="hint" style="margin:8px 0 0">💡 빈칸 길이를 노래에 딱 맞추려면: <b>③ 🎵 음악 › ⏱ 장면 맞추기</b>에서 「뒤 장면」을 <b>B 같이</b>로 → ▶ 들으며 빈칸이 끝나야 할 곳에서 ⏸ → <b>✂️ 여기서 끝</b> (뒤 사진이 함께 따라와요)</p>`;
   h += '</div>';
   if (c && c.blank) h += blankFill(c);
   return h;
@@ -1057,7 +1065,7 @@ function lyrCmd(a, v) {
   if (a === 'lyrtapstop') { if (LYT > 0) { const done = LYT, last = Ly.lines[done - 1].t, e = mf.dur - Math.min(8, mf.dur * .05), rest = Ly.lines.length - done, st = (e - last) / Math.max(1, rest + 1); for (let i = done; i < Ly.lines.length; i++) Ly.lines[i].t = Math.round((last + (i - done + 1) * st) * 10) / 10; } LYT = -1; if (PLAY) pause(); commit(); renderPanel(); return toast('■ 그만했어요 · 남은 줄은 고르게 나눴어요'); }
 }
 /* ── 🎵 소리 ── */
-/* ── ② 🎤 노래 맞추기 탭들 ── */
+/* ── 💬 자막 · 🎵 음악 탭들 ── */
 function pMus(c) {
   const M = P.music, pp = PURPOSE[P.purpose], L = (g.BKMUSIC && g.BKMUSIC.LIST) || [];
   return `<div class="grp"><h3>🎵 배경 음악</h3><h4>내 음악 (수노 MP3 등)</h4><label class="btnf ${M.kind === 'file' ? 'on' : ''}">📁 내 음악 파일 고르기 ${M.kind === 'file' ? '(넣음)' : ''}<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label>${musFitBox()}
@@ -1070,7 +1078,7 @@ function pMus(c) {
    <div class="grp"><h3>🎞 동영상 원래 소리 (전체)</h3>${range('cvol', P.clipVol, 0, 1.5, .05, '크기 %')}</div><button type="button" data-a="play" class="pri">▶ 소리까지 미리 듣기</button>`;
 }
 function pLyr() {
-  if (!musFile()) return `<div class="grp"><h3>🎤 노래방 가사 자막</h3><p style="margin-top:0">먼저 <b>내 음악(MP3)</b>을 넣어 주세요. 가사를 그 노래에 맞춰 노래방처럼 보여 줘요.</p><label class="btnf">📁 내 음악 파일 고르기<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label><p class="hint">수노에서 받은 MP3를 고르면 돼요. 프로그램 음악은 🎵 음악 탭에 있어요.</p></div>`;
+  if (!musFile()) return `<div class="grp"><h3>🎤 노래방 가사 자막</h3><p style="margin-top:0">먼저 <b>내 음악(MP3)</b>을 넣어 주세요. 가사를 그 노래에 맞춰 노래방처럼 보여 줘요.</p><label class="btnf">📁 내 음악 파일 고르기<input type="file" data-a="musf" accept="audio/*,.mp3,.m4a,.wav" hidden></label><p class="hint">수노에서 받은 MP3를 고르면 돼요. 프로그램 음악은 위 <b>③ 🎵 음악</b>에 있어요.</p></div>`;
   let h = lyrBox(); const Ly = P.lyrics;
   if (Ly && Ly.lines && Ly.lines.length) { if (ORDM !== 'ai') ORDM = 'lyr'; h += `<div class="grp"><h3>🖼 가사 줄마다 사진 고르기 <small>그 가사를 부르는 동안 그 사진이 나와요</small></h3>${chips('ordm', { lyr: '🎤 내가 고르기', ai: '🤖 AI가 짝짓기' }, ORDM)}</div>` + (ORDM === 'ai' ? aiUI() : lyrUI()); }
   return h;
@@ -1087,12 +1095,18 @@ function pVo(c) {
   return h + `</div><button type="button" data-a="play" class="pri">▶ 소리까지 미리 듣기</button>`;
 }
 /* ── ① 😀 글씨·스티커 (장면 글씨 + 스티커 한곳에) ── */
-function pDeco(c) {
-  return `<p class="hint" style="margin:0 0 8px">🎤 노래 가사 자막은 <b>② 노래 맞추기 › 🎤 가사</b>에 있어요. 여기는 장면 위에 얹는 글씨 · 스티커예요.</p>` + pCap(c) + pStk(c).replace(head(c), '');
+function pKku(c) {   // ✨ 꾸미기 = 효과 + 스티커
+  return pFx(c) + pStk(c).replace(head(c), '');
+}
+function pText(c) {   // 💬 장면 글씨
+  return `<p class="hint" style="margin:0 0 8px">🎤 노래 가사 자막(노래방)은 옆 <b>🎤 노래 가사</b> 탭이에요. 여기는 장면 위에 얹는 글씨예요.</p>` + pCap(c);
+}
+function pBlank() {
+  return blankBox() + `<div class="grp"><h3>⬜ 빈칸은 이럴 때</h3><ul class="tips"><li>사진이 노래 · 가사와 <b>어긋나기 시작하는 곳</b>에 빈칸을 넣어 뒤 사진을 밀어요</li><li>나중에 빈칸을 눌러 🖼 사진으로 채우거나, 🔗 붙어 있는 빈칸끼리 합쳐요</li><li>아래 사진 줄에서 사진을 꾹 → <b>⬜ 이 장면 앞에 빈칸 넣기</b>도 돼요</li><li>빈칸 길이를 노래에 딱 맞추기 → <b>③ 🎵 음악 › ⏱ 장면 맞추기</b>의 ✂️ 여기서 끝</li></ul></div>`;
 }
 /* ── ① 🧩 순서 ── */
 function pOrder() {
-  return `<div class="grp"><h3>🧩 순서 바꾸는 방법</h3><ul class="tips"><li>아래 사진 줄에서 사진을 <b>꾹 누른 채 끌면</b> 옮겨져요</li><li><b>꾹 눌렀다 떼면</b> 📄 복사 · 📍 몇 번 사이에 · ↔ 옮기기 · 🔄 바꾸기 메뉴</li><li>✂️ 장면 탭: ⏮ 맨 앞 · 맨 뒤 ⏭ · 🔢 몇 번째로 · 📌 고정</li><li>가사에 맞춰 사진 고르기 → <b>② 노래 맞추기 › 🎤 가사</b></li></ul>
+  return `<div class="grp"><h3>🧩 순서 바꾸는 방법</h3><ul class="tips"><li>아래 사진 줄에서 사진을 <b>꾹 누른 채 끌면</b> 옮겨져요</li><li><b>꾹 눌렀다 떼면</b> 📄 복사 · 📍 몇 번 사이에 · ↔ 옮기기 · 🔄 바꾸기 메뉴</li><li>✂️ 장면 탭: ⏮ 맨 앞 · 맨 뒤 ⏭ · 🔢 몇 번째로 · 📌 고정</li><li>⬜ 빈칸 넣기 · 합치기 → 옆 <b>⬜ 빈칸</b> 탭</li><li>가사에 맞춰 사진 고르기 → <b>② 💬 자막 › 🎤 노래 가사</b></li></ul>
     <div class="btns2"><button type="button" data-a="sortdate">🗓 찍은 날짜 순서로</button><button type="button" data-a="gotab" data-v="lyr">🎤 가사 보며 고르기로</button></div></div>` + tapUI();
 }
 /* 🎤 가사: 붙여넣으면 바로 저장 · ✅ 안 누르면 알려 주기 */

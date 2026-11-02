@@ -142,13 +142,13 @@ details.sub{margin-top:10px;border-top:1px dashed var(--ln);padding-top:8px}deta
 .shnum{display:grid;grid-template-columns:56px 1fr 56px;gap:8px;margin:12px 0 4px}.shnum button{border:0;border-radius:12px;background:#efe9fb;color:#4c2a9e;font-size:1.6rem;font-weight:900;cursor:pointer}.shnum input{width:100%;text-align:center;font-size:1.8rem;font-weight:900;border:2px solid var(--ac);border-radius:12px;padding:6px;color:var(--ac2)}
 .shsay{text-align:center;font-size:1.05rem;margin:6px 0}.shsay b{color:#b45309}
 /* v36: 큰 단계 3개 (① 영상 만들기 · ② 노래 맞추기 · ③ 마무리) */
-.modes{width:min(100%,560px);display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:#e4dbf6;border-radius:13px;padding:3px}
-.modes button{border:0;border-radius:10px;background:transparent;padding:7px 2px;font-weight:800;font-size:.84rem;color:#6e6488;cursor:pointer;line-height:1.2;white-space:nowrap;touch-action:manipulation}
+.modes{width:min(100%,560px);display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:#e4dbf6;border-radius:13px;padding:3px}
+.modes button{border:0;border-radius:10px;background:transparent;padding:7px 2px;font-weight:800;font-size:.9rem;color:#6e6488;cursor:pointer;line-height:1.2;white-space:nowrap;touch-action:manipulation}
 .modes button b{display:inline-block;margin-right:2px;color:inherit;opacity:.8}
 .modes button[aria-pressed=true]{background:#fff;color:var(--ac2);box-shadow:0 1px 5px rgba(80,50,140,.28)}
-body[data-mode=song] .modes button[aria-pressed=true]{background:#fff7ed;color:#c2410c}
+body[data-mode=cap] .modes button[aria-pressed=true]{background:#eff6ff;color:#1d4ed8}body[data-mode=song] .modes button[aria-pressed=true]{background:#fff7ed;color:#c2410c}
 body[data-mode=fin] .modes button[aria-pressed=true]{background:#ecfdf5;color:#047857}
-@media(max-width:380px){.modes button{font-size:.76rem}}
+@media(max-width:380px){.modes button{font-size:.8rem}}
 .tabs button{flex:1 1 0}
 ul.tips{margin:4px 0 8px;padding-left:18px;font-size:.88rem;line-height:1.6}ul.tips li{margin:2px 0}
 .lyrwarn{margin:6px 0;background:#fef3c7;border:1.5px solid #f59e0b;color:#92400e;border-radius:10px;padding:7px 10px;font-size:.86rem;font-weight:700}
