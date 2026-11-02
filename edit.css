@@ -158,3 +158,18 @@ button.lnk{border:0;background:none;color:var(--ac2);font-weight:800;text-decora
 .gbtn img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}.gbtn .lno{position:absolute;inset:0;display:grid;place-items:center;font-size:1.6rem}
 .libg .gbtn.on{border-color:#f59e0b;box-shadow:0 0 0 3px #f59e0b}.libg .gbtn.on::after{content:"✓";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:12px;background:#f59e0b;color:#fff;font:900 .9rem/24px sans-serif;text-align:center}
 .libg .gbtn small{right:3px;left:auto}
+/* v39: ⬜ 빈칸 버튼 · 🔒 잠금 · 🎤 줄마다 다듬기 · 🖼 카드 사진 */
+.cutbar{grid-template-columns:repeat(5,1fr);gap:4px}.cutbar button{font-size:.74rem;padding:5px 1px}.cutbar button.md{font-size:.66rem}.cutbar button.md b{font-size:.76rem}
+.cutbar.locked{display:flex;align-items:center;gap:8px;background:#ecfdf5;border:1.5px solid #34d399;border-radius:12px;padding:6px 8px;font-size:.84rem;font-weight:800;color:#047857}.cutbar.locked span{flex:1}.cutbar.locked button{flex:none;min-height:36px;padding:6px 12px;background:#fff;border:1.5px solid #34d399;color:#047857;font-size:.84rem}
+#lockBtn[aria-pressed=true]{background:#ecfdf5;border-color:#34d399;color:#047857;font-weight:800}
+.lockban{background:#fffbeb;border:1.5px solid #fcd34d;border-radius:14px;padding:10px 12px;margin:0 0 10px;font-size:.9rem;line-height:1.5}.lockban.on{background:#ecfdf5;border-color:#6ee7b7}.lockban small{color:#6e6488}.lockban button{display:block;width:100%;margin-top:8px}
+.shlen{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}.shlen button{border:2px solid #c4b5fd;background:#fff;border-radius:14px;padding:16px 4px;font-size:1.2rem;font-weight:900;color:#4c2a9e;cursor:pointer}.shlen button.on{background:#f3edff;border-color:var(--ac)}
+.lyls{max-height:240px;overflow:auto;border:1.5px solid var(--ln);border-radius:12px;background:#fff;margin:6px 0}
+.lyl{display:flex;gap:8px;width:100%;text-align:left;border:0;border-bottom:1px solid #f1ecfa;background:none;padding:8px 10px;cursor:pointer;font-size:.9rem;line-height:1.35}.lyl b{flex:none;color:var(--ac2);font-variant-numeric:tabular-nums;min-width:52px}
+.lyl.sel{background:#f3edff;box-shadow:inset 4px 0 0 var(--ac)}.lyl.now{background:#fef9c3}.lyl.now.sel{background:#fde68a}
+.lytool{background:#f5f3ff;border:1.5px solid #c4b5fd;border-radius:12px;padding:10px;margin:6px 0 8px}
+.cardpic .cpr{display:flex;gap:10px;align-items:center;margin-bottom:8px}.cardpic .cpr>div{flex:1}.cardpic .cpr b{display:block;font-size:.88rem;margin-bottom:6px}.cardpic .cpr button{width:100%}
+.shth.cpn,.cardpic .cpn{display:grid;place-items:center;font-size:1.6rem;width:52px;height:52px;border-radius:10px;background:#2a2140}
+.cardpic .shth{flex:none;width:64px;height:64px;border-radius:10px;overflow:hidden;background:#2a2140}.cardpic .shth canvas{width:100%;height:100%;display:block}
+/* 빨간 세로줄은 눌러도 그냥 지나가게 (사진 · 오프닝 카드를 누를 수 있게) — 아래 동그라미만 잡혀요 */
+#ph{pointer-events:none}#ph::before{display:none}#ph b{pointer-events:auto;touch-action:none}

@@ -177,7 +177,7 @@ function drawFrame(x, W, H, t, opt) {
   if (!P || !P.clips.length) return;
   const A = clipAt(P, t); if (!A.c) return;
   const c = A.c, len = clipLen(c), still = !!opt.still, lt = still ? (c.kind === 'card' ? Math.max(A.lt, Math.min(1.8, len * .6)) : Math.max(A.lt, Math.min(.6, len * .4))) : A.lt, tr = eff(P, c, 'trans');
-  const prevLen = A.i > 0 ? clipLen(P.clips[A.i - 1]) : 0, td = Math.min(P.transSpeed ? ({ fast: .35, normal: .6, slow: 1 }[P.transSpeed] || .6) : (c.td || .6), len * .45, prevLen * .45);
+  const prevLen = A.i > 0 ? clipLen(P.clips[A.i - 1]) : 0, td = Math.min(P.transDur ? +P.transDur : P.transSpeed ? ({ fast: .35, normal: .6, slow: 1 }[P.transSpeed] || .6) : (c.td || .6), len * .45, prevLen * .45);
   if (!still && A.i > 0 && tr !== 'cut' && lt < td && (P.clips[A.i - 1].kind !== 'video' || srcEl(P.clips[A.i - 1], true))) {
     const a = tmp('la', W, H), b = tmp('lb', W, H), ax = a.getContext('2d'), bx = b.getContext('2d');
     drawLayer(ax, W, H, A.i - 1, prevLen, true); drawLayer(bx, W, H, A.i, lt, false);
@@ -196,6 +196,12 @@ function drawFrame(x, W, H, t, opt) {
     else if (tr === 'spin') { x.drawImage(a, 0, 0); x.globalAlpha = Math.min(1, e * 1.4); x.translate(W / 2, H / 2); x.rotate((1 - e) * -1.2); const s = .35 + .65 * e; x.scale(s, s); x.drawImage(b, -W / 2, -H / 2); }
     else if (tr === 'zoomout') { x.drawImage(b, 0, 0); x.globalAlpha = 1 - e; x.translate(W / 2, H / 2); const s = 1 + e * .6; x.scale(s, s); x.drawImage(a, -W / 2, -H / 2); }
     else if (tr === 'glitch') { const src = p < .5 ? a : b, k = 1 - Math.abs(p * 2 - 1), n = 12, bh = H / n, f = Math.floor(p * 14); x.drawImage(src, 0, 0); for (let j = 0; j < n; j++) { const off = (h01(j, f) - .5) * W * .22 * k; if (Math.abs(off) > 1) x.drawImage(src, 0, j * bh, W, bh, off, j * bh, W, bh); } x.globalAlpha = .35 * k; x.globalCompositeOperation = 'lighter'; x.drawImage(src, W * .015 * k, 0); x.globalCompositeOperation = 'source-over'; }
+    else if (tr === 'diamond') { x.drawImage(a, 0, 0); const R = (W + H) * .55 * e + 1; x.beginPath(); x.moveTo(W / 2, H / 2 - R); x.lineTo(W / 2 + R, H / 2); x.lineTo(W / 2, H / 2 + R); x.lineTo(W / 2 - R, H / 2); x.closePath(); x.clip(); x.drawImage(b, 0, 0); }
+    else if (tr === 'page') { x.drawImage(b, 0, 0); const w = Math.max(1, W * (1 - e)); x.drawImage(a, 0, 0, W, H, 0, 0, w, H); const g2 = x.createLinearGradient(w - W * .08, 0, w + W * .06, 0); g2.addColorStop(0, 'rgba(0,0,0,0)'); g2.addColorStop(.55, 'rgba(0,0,0,.35)'); g2.addColorStop(.6, 'rgba(255,255,255,.5)'); g2.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g2; x.fillRect(w - W * .08, 0, W * .14, H); }
+    else if (tr === 'fly') { x.drawImage(b, 0, 0); x.globalAlpha = 1 - e * .4; x.translate(W / 2 + e * W * .85, H / 2 - e * H * .75); x.rotate(-e * .7); const s = Math.max(.02, 1 - e * .92); x.scale(s, s * (1 - .25 * Math.sin(e * Math.PI))); x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = 20; x.drawImage(a, -W / 2, -H / 2); }
+    else if (tr === 'blocks') { x.drawImage(a, 0, 0); const nx = 5, ny = Math.max(5, Math.round(5 * H / W)), bw = W / nx, bh = H / ny; for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) { const k = clamp((e - h01(i + 1, j + 7) * .6) / .4, 0, 1); if (k <= 0) continue; x.save(); x.globalAlpha = k; const s = .6 + .4 * k; x.beginPath(); x.rect(i * bw + bw * (1 - s) / 2, j * bh + bh * (1 - s) / 2, bw * s + 1, bh * s + 1); x.clip(); x.drawImage(b, 0, 0); x.restore(); } }
+    else if (tr === 'diag') { x.drawImage(a, 0, 0); const D = (W + H) * e * 1.05; x.save(); x.beginPath(); x.moveTo(0, 0); x.lineTo(D, 0); x.lineTo(D - H, H); x.lineTo(0, H); x.closePath(); x.clip(); x.drawImage(b, 0, 0); x.restore(); const gl = x.createLinearGradient(D - H * .5 - W * .06, 0, D - H * .5 + W * .06, 0); gl.addColorStop(0, 'rgba(255,255,255,0)'); gl.addColorStop(.5, 'rgba(255,255,240,.85)'); gl.addColorStop(1, 'rgba(255,255,255,0)'); x.globalAlpha = Math.sin(p * Math.PI); x.beginPath(); x.moveTo(D - W * .06, 0); x.lineTo(D + W * .06, 0); x.lineTo(D - H + W * .06, H); x.lineTo(D - H - W * .06, H); x.closePath(); x.fillStyle = gl; x.fill(); }
+    else if (tr === 'blinds') { x.drawImage(a, 0, 0); const n = 8, bh = H / n; x.beginPath(); for (let j = 0; j < n; j++) x.rect(0, j * bh, W, bh * e + .5); x.clip(); x.drawImage(b, 0, 0); }
     else x.drawImage(b, 0, 0);
     x.restore();
   } else drawLayer(x, W, H, A.i, lt, false);
@@ -341,13 +347,21 @@ function drawWatermark(x, W, H, c) {
 const CTA = { store: '지금 방문하세요!', menu: '오늘 맛보러 오세요!', product: '지금 만나 보세요!', realty: '문의 환영합니다', company: '감사합니다', me: '편하게 연락 주세요' };
 function pinMedia(kind) { const P = ED.P, c = P.clips.find(x => x.pin === kind); if (!c) return null; const s = SRC.get(c.src); return s ? (s.img || (ED.thumbs && ED.thumbs.get(c.src)) || null) : null; }
 function firstMedia() { const P = ED.P, pm = pinMedia('first'); if (pm) return pm; for (const c of P.clips) { if (c.kind === 'image') { const s = SRC.get(c.src); if (s) return s.img; } } for (const c of P.clips) if (c.kind === 'video') { const e = ED.thumbs && ED.thumbs.get(c.src); if (e) return e; } return null; }
-function cardBg(x, W, H, type, B, isEnd) {
+function cardBg(x, W, H, type, B, isEnd, c) {
   const P = ED.P;
-  if (isEnd && !((type === 'store' || type === 'company') && B)) { const im = pinMedia('last'); if (im) { blurBg(x, im, im.width || im.videoWidth, im.height || im.videoHeight, W, H, 'none', 'ce'); x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(0, 0, W, H); return; } }
+  if (c && c.bgSrc && c.bgMode !== 'none') {   // 🖼 오프닝 · 엔딩에 직접 고른 사진
+    const s = SRC.get(c.bgSrc), im = s ? (s.img || (ED.thumbs && ED.thumbs.get(c.bgSrc))) : null;
+    if (im) { const iw = im.width || im.videoWidth, ih = im.height || im.videoHeight;
+      if (c.bgMode === 'clear') { const r = coverRect(iw, ih, W, H, .5, .5); x.drawImage(im, r[0], r[1], r[2], r[3]); const g2 = x.createLinearGradient(0, 0, 0, H); g2.addColorStop(0, 'rgba(0,0,0,.2)'); g2.addColorStop(.5, 'rgba(0,0,0,.3)'); g2.addColorStop(1, 'rgba(0,0,0,.6)'); x.fillStyle = g2; x.fillRect(0, 0, W, H); }
+      else { blurBg(x, im, iw, ih, W, H, 'none', 'cg' + (isEnd ? 'e' : 't')); x.fillStyle = 'rgba(0,0,0,.5)'; x.fillRect(0, 0, W, H); }
+      return; }
+  }
+  const noPh = !!(c && c.bgMode === 'none');
+  if (!noPh && isEnd && !((type === 'store' || type === 'company') && B)) { const im = pinMedia('last'); if (im) { blurBg(x, im, im.width || im.videoWidth, im.height || im.videoHeight, W, H, 'none', 'ce'); x.fillStyle = 'rgba(0,0,0,.55)'; x.fillRect(0, 0, W, H); return; } }
   if (type === 'memorial') { const gr = x.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#0b0b0f'); gr.addColorStop(1, '#1c1917'); x.fillStyle = gr; x.fillRect(0, 0, W, H); return; }
   if (type === 'credits') { x.fillStyle = '#0b1020'; x.fillRect(0, 0, W, H); return; }
   if ((type === 'store' || type === 'company') && B) { const col = B.color || '#174782', gr = x.createLinearGradient(0, 0, W, H); gr.addColorStop(0, col); gr.addColorStop(1, '#0f172a'); x.fillStyle = gr; x.fillRect(0, 0, W, H); return; }
-  const im = firstMedia();
+  const im = noPh ? null : firstMedia();
   if (im) { blurBg(x, im, im.width || im.videoWidth, im.height || im.videoHeight, W, H, 'none', 'cb'); x.fillStyle = 'rgba(0,0,0,.5)'; x.fillRect(0, 0, W, H); return; }
   const pal = { meet: ['#7c3aed', '#db2777'], family: ['#f59e0b', '#ef4444'], kids: ['#f9a8d4', '#a78bfa'], travel: ['#0ea5e9', '#14b8a6'], event: ['#174782', '#0f172a'], church: ['#78350f', '#1c1917'], blog: ['#334155', '#0f172a'] }[P.purpose] || ['#174782', '#0f172a'];
   const gr = x.createLinearGradient(0, 0, W, H); gr.addColorStop(0, pal[0]); gr.addColorStop(1, pal[1]); x.fillStyle = gr; x.fillRect(0, 0, W, H);
@@ -363,7 +377,7 @@ function drawCard(x, W, H, c, lt, len) {
   const P = ED.P, I = P.info, B = brand(), pp = PURPOSE[P.purpose] || PURPOSE.meet, m = Math.min(W, H), wide = W / H > 1.2;
   const type = c.card === 'title' ? 'title' : (c.card || pp.end);
   const ff = P.capDef.font || (CAPS[P.capDef.style] || CAPS.basic).font;
-  x.save(); cardBg(x, W, H, type, B, c.card !== 'title');
+  x.save(); cardBg(x, W, H, type, B, c.card !== 'title', c);
   const a = k => clamp((lt - k) / .6, 0, 1), out = clamp((len - lt) / .4, 0, 1);
   x.globalAlpha = out;
   if (type === 'title') {
